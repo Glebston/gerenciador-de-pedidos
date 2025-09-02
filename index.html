@@ -679,7 +679,6 @@
                     DOM.ordersList.innerHTML = '<div class="w-full text-center py-10 text-gray-500 col-span-full">Nenhum pedido pendente.</div>';
                     return;
                 }
-                nonDeliveredOrders.sort((a, b) => new Date(a.deliveryDate) - new Date(b.deliveryDate));
                 const groupedOrders = nonDeliveredOrders.reduce((acc, order) => {
                     const date = order.deliveryDate || 'Sem Data';
                     if (!acc[date]) acc[date] = [];
@@ -688,7 +687,6 @@
                 }, {});
 
                 let html = '';
-                // Get sorted keys to render dates in order
                 const sortedDates = Object.keys(groupedOrders).sort((a, b) => {
                     if (a === 'Sem Data') return 1;
                     if (b === 'Sem Data') return -1;
@@ -1199,21 +1197,28 @@
                 const subtotal = (p.quantity || 0) * (p.unitPrice || 0);
                 totalValue += subtotal;
                 let itemsDetailHtml = '';
-                if (p.partInputType === 'comum' && p.sizes) {
-                    itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + Object.entries(p.sizes).map(([cat, sizes]) =>
-                        `<strong>${cat}:</strong> ${Object.entries(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
-                    ).join('<br>') + '</div>';
-                } else if (p.partInputType === 'detalhado' && p.details) {
+
+                if (p.partInputType === 'comum' && p.sizes && Object.keys(p.sizes).length > 0) {
+                    const categoriesWithSizes = Object.entries(p.sizes)
+                        .filter(([, sizes]) => Object.keys(sizes).length > 0);
+                    
+                    if (categoriesWithSizes.length > 0) {
+                        itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + categoriesWithSizes.map(([cat, sizes]) =>
+                            `<strong>${cat}:</strong> ${Object.entries(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
+                        ).join('<br>') + '</div>';
+                    }
+                } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
                     itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + p.details.map(d => `${d.name || ''} - ${d.size || ''} - ${d.number || ''}`).join('<br>') + '</div>';
                 }
+
                 return `
                     <tr>
-                        <td class="py-1 px-2 border">${p.type}${itemsDetailHtml}</td>
-                        <td class="py-1 px-2 border">${p.material}</td>
-                        <td class="py-1 px-2 border">${p.colorMain}</td>
-                        <td class="py-1 px-2 border text-center">${p.quantity}</td>
-                        <td class="py-1 px-2 border text-right">R$ ${(p.unitPrice || 0).toFixed(2)}</td>
-                        <td class="py-1 px-2 border text-right font-semibold">R$ ${subtotal.toFixed(2)}</td>
+                        <td class="py-1 px-2 border align-top">${p.type}${itemsDetailHtml}</td>
+                        <td class="py-1 px-2 border align-top">${p.material}</td>
+                        <td class="py-1 px-2 border align-top">${p.colorMain}</td>
+                        <td class="py-1 px-2 border text-center align-top">${p.quantity}</td>
+                        <td class="py-1 px-2 border text-right align-top">R$ ${(p.unitPrice || 0).toFixed(2)}</td>
+                        <td class="py-1 px-2 border text-right font-semibold align-top">R$ ${subtotal.toFixed(2)}</td>
                     </tr>`;
             }).join('');
 
@@ -1228,8 +1233,8 @@
                             <div><strong>Data de Entrega:</strong> ${order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString() : 'N/A'}</div>
                         </div>
                         <h3 class="font-bold text-lg mt-4">Peças</h3>
-                        <table class="w-full text-left text-sm mt-2">
-                            <thead><tr class="bg-gray-100"><th class="px-2 py-1">Tipo/Detalhes</th><th class="px-2 py-1">Material</th><th class="px-2 py-1">Cor</th><th class="px-2 py-1 text-center">Qtd</th><th class="px-2 py-1 text-right">V. Un.</th><th class="px-2 py-1 text-right">Subtotal</th></tr></thead>
+                        <table class="w-full text-left text-sm mt-2 border-collapse">
+                            <thead><tr class="bg-gray-100"><th class="px-2 py-1 border">Tipo/Detalhes</th><th class="px-2 py-1 border">Material</th><th class="px-2 py-1 border">Cor</th><th class="px-2 py-1 border text-center">Qtd</th><th class="px-2 py-1 border text-right">V. Un.</th><th class="px-2 py-1 border text-right">Subtotal</th></tr></thead>
                             <tbody>${partsHtml}</tbody>
                         </table>
                         <h3 class="font-bold text-lg mt-4">Observação Geral</h3>
