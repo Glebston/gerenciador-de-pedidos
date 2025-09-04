@@ -28,7 +28,6 @@
         .status-Em-Produção { @apply bg-purple-100 text-purple-800; }
         .status-Finalizado { @apply bg-green-100 text-green-800; }
         .status-Entregue { @apply bg-gray-200 text-gray-800; }
-        .responsive-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
     </style>
 </head>
 <body class="antialiased text-gray-800 bg-slate-50">
@@ -48,9 +47,9 @@
 
     <div id="app" class="hidden">
         <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-40">
-            <div class="mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <div>
-                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos </h1>
+                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos 1</h1>
                 </div>
                 <div class="flex items-center gap-4">
                     <button id="addOrderBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300 flex items-center justify-center">
@@ -77,10 +76,10 @@
             </div>
         </header>
 
-        <main id="mainContent" class="mx-auto p-4 sm:p-6 lg:p-8">
+        <main id="mainContent" class="w-full mx-auto p-4 sm:p-6 lg:p-8">
             <div id="ordersDashboard">
-                <div id="ordersList">
-                    <div id="loadingIndicator" class="text-center w-full text-gray-500">Carregando pedidos...</div>
+                <div id="ordersList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+                    <div id="loadingIndicator" class="text-center w-full text-gray-500 col-span-full">Carregando pedidos...</div>
                 </div>
             </div>
             <div id="financeDashboard" class="hidden">
@@ -402,12 +401,12 @@
 
         const IMGBB_API_KEY = "f012978df48f3596b193c06e05589442";
         const firebaseConfig = { 
-          apiKey: "AIzaSyA8MxD_m6lKrrQKijlxQ0lQUQdC3OpTEv4", 
-          authDomain: "saas-57e0d.firebaseapp.com", 
-          projectId: "saas-57e0d", 
-          storageBucket: "saas-57e0d.appspot.com", 
-          messagingSenderId: "230026949437", 
-          appId: "1:230026949437:web:9f19f286aefb96e0330b54" 
+            apiKey: "AIzaSyA8MxD_m6lKrrQKijlxQ0lQUQdC3OpTEv4", 
+            authDomain: "saas-57e0d.firebaseapp.com", 
+            projectId: "saas-57e0d", 
+            storageBucket: "saas-57e0d.appspot.com", 
+            messagingSenderId: "230026949437", 
+            appId: "1:230026949437:web:9f19f286aefb96e0330b54" 
         };
 
         let app, db, auth, userId = null, dbCollection, transactionsCollection;
@@ -648,7 +647,7 @@
             }, (error) => {
                 console.error("Erro ao buscar pedidos:", error);
                 DOM.loadingIndicator.style.display = 'none';
-                DOM.ordersList.innerHTML = '<p class="w-full text-center text-gray-500">Erro ao carregar pedidos.</p>';
+                DOM.ordersList.innerHTML = '<p class="w-full text-center text-gray-500 col-span-full">Erro ao carregar pedidos.</p>';
             });
         };
 
@@ -670,54 +669,24 @@
         const renderOrders = () => {
             if (currentDashboardView !== 'orders') return;
             DOM.loadingIndicator.style.display = 'none';
-            DOM.ordersList.className = '';
+            DOM.ordersList.innerHTML = ''; 
 
+            let ordersToRender;
             if (currentOrdersView === 'pending') {
-                DOM.ordersList.classList.add('responsive-grid');
-                const nonDeliveredOrders = allOrders.filter(o => o.orderStatus !== 'Entregue');
-                if (nonDeliveredOrders.length === 0) {
-                    DOM.ordersList.innerHTML = '<div class="w-full text-center py-10 text-gray-500 col-span-full">Nenhum pedido pendente.</div>';
-                    return;
-                }
-                const groupedOrders = nonDeliveredOrders.reduce((acc, order) => {
-                    const date = order.deliveryDate || 'Sem Data';
-                    if (!acc[date]) acc[date] = [];
-                    acc[date].push(order);
-                    return acc;
-                }, {});
-
-                let html = '';
-                const sortedDates = Object.keys(groupedOrders).sort((a, b) => {
-                    if (a === 'Sem Data') return 1;
-                    if (b === 'Sem Data') return -1;
-                    return new Date(a) - new Date(b);
-                });
-
-                for (const date of sortedDates) {
-                    const orders = groupedOrders[date];
-                    const formattedDate = date === 'Sem Data' ?
-                        'Sem Data de Entrega' :
-                        new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-                    html += `
-                        <div>
-                            <h2 class="font-bold text-lg text-gray-700 mb-4 flex items-center">
-                                ${formattedDate}
-                                <span class="ml-2 text-sm font-medium bg-slate-200 text-slate-600 rounded-full px-2 py-0.5">${orders.length}</span>
-                            </h2>
-                            <div class="space-y-4">${orders.map(order => generateOrderCardHTML(order, 'pending')).join('')}</div>
-                        </div>`;
-                }
-                DOM.ordersList.innerHTML = html;
+                ordersToRender = allOrders.filter(o => o.orderStatus !== 'Entregue');
+                ordersToRender.sort((a, b) => new Date(a.deliveryDate) - new Date(b.deliveryDate));
             } else {
-                DOM.ordersList.classList.add('grid', 'grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-4', 'gap-6');
-                const deliveredOrders = allOrders.filter(o => o.orderStatus === 'Entregue');
-                if (deliveredOrders.length === 0) {
-                    DOM.ordersList.innerHTML = '<p class="col-span-full text-center py-10 text-gray-500">Nenhum pedido entregue encontrado.</p>';
-                    return;
-                }
-                deliveredOrders.sort((a, b) => new Date(b.deliveryDate || 0) - new Date(a.deliveryDate || 0));
-                DOM.ordersList.innerHTML = deliveredOrders.map(order => generateOrderCardHTML(order, 'delivered')).join('');
+                ordersToRender = allOrders.filter(o => o.orderStatus === 'Entregue');
+                ordersToRender.sort((a, b) => new Date(b.deliveryDate || 0) - new Date(a.deliveryDate || 0));
             }
+            
+            if (ordersToRender.length === 0) {
+                 const message = currentOrdersView === 'pending' ? 'Nenhum pedido pendente.' : 'Nenhum pedido entregue encontrado.';
+                 DOM.ordersList.innerHTML = `<p class="col-span-full text-center py-10 text-gray-500">${message}</p>`;
+                 return;
+            }
+
+            DOM.ordersList.innerHTML = ordersToRender.map(order => generateOrderCardHTML(order, currentOrdersView)).join('');
         };
 
         const generateOrderCardHTML = (order, viewType) => {
@@ -1197,34 +1166,27 @@
                 const subtotal = (p.quantity || 0) * (p.unitPrice || 0);
                 totalValue += subtotal;
                 let itemsDetailHtml = '';
-
                 if (p.partInputType === 'comum' && p.sizes && Object.keys(p.sizes).length > 0) {
-                    const categoriesWithSizes = Object.entries(p.sizes)
-                        .filter(([, sizes]) => Object.keys(sizes).length > 0);
-                    
-                    if (categoriesWithSizes.length > 0) {
-                        itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + categoriesWithSizes.map(([cat, sizes]) =>
-                            `<strong>${cat}:</strong> ${Object.entries(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
-                        ).join('<br>') + '</div>';
-                    }
+                    itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + Object.entries(p.sizes).map(([cat, sizes]) =>
+                        `<strong>${cat}:</strong> ${Object.entries(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
+                    ).join('<br>') + '</div>';
                 } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
                     itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + p.details.map(d => `${d.name || ''} - ${d.size || ''} - ${d.number || ''}`).join('<br>') + '</div>';
                 }
-
                 return `
                     <tr>
-                        <td class="py-1 px-2 border align-top">${p.type}${itemsDetailHtml}</td>
-                        <td class="py-1 px-2 border align-top">${p.material}</td>
-                        <td class="py-1 px-2 border align-top">${p.colorMain}</td>
-                        <td class="py-1 px-2 border text-center align-top">${p.quantity}</td>
-                        <td class="py-1 px-2 border text-right align-top">R$ ${(p.unitPrice || 0).toFixed(2)}</td>
-                        <td class="py-1 px-2 border text-right font-semibold align-top">R$ ${subtotal.toFixed(2)}</td>
+                        <td class="py-1 px-2 border">${p.type}${itemsDetailHtml}</td>
+                        <td class="py-1 px-2 border">${p.material}</td>
+                        <td class="py-1 px-2 border">${p.colorMain}</td>
+                        <td class="py-1 px-2 border text-center">${p.quantity}</td>
+                        <td class="py-1 px-2 border text-right">R$ ${(p.unitPrice || 0).toFixed(2)}</td>
+                        <td class="py-1 px-2 border text-right font-semibold">R$ ${subtotal.toFixed(2)}</td>
                     </tr>`;
             }).join('');
 
             const modalContent = `
                 <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
-                    <div id="printableArea" class="p-8 overflow-y-auto">
+                    <div id="printable-details" class="p-8 pb-8 overflow-y-auto">
                         <h2 class="text-2xl font-bold mb-4">Detalhes do Pedido - ${order.clientName}</h2>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm mb-4">
                             <div><strong>Telefone:</strong> ${order.clientPhone || 'N/A'}</div>
@@ -1233,8 +1195,8 @@
                             <div><strong>Data de Entrega:</strong> ${order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString() : 'N/A'}</div>
                         </div>
                         <h3 class="font-bold text-lg mt-4">Peças</h3>
-                        <table class="w-full text-left text-sm mt-2 border-collapse">
-                            <thead><tr class="bg-gray-100"><th class="px-2 py-1 border">Tipo/Detalhes</th><th class="px-2 py-1 border">Material</th><th class="px-2 py-1 border">Cor</th><th class="px-2 py-1 border text-center">Qtd</th><th class="px-2 py-1 border text-right">V. Un.</th><th class="px-2 py-1 border text-right">Subtotal</th></tr></thead>
+                        <table class="w-full text-left text-sm mt-2">
+                            <thead><tr class="bg-gray-100"><th class="px-2 py-1">Tipo/Detalhes</th><th class="px-2 py-1">Material</th><th class="px-2 py-1">Cor</th><th class="px-2 py-1 text-center">Qtd</th><th class="px-2 py-1 text-right">V. Un.</th><th class="px-2 py-1 text-right">Subtotal</th></tr></thead>
                             <tbody>${partsHtml}</tbody>
                         </table>
                         <h3 class="font-bold text-lg mt-4">Observação Geral</h3>
@@ -1252,8 +1214,7 @@
                         </div>
                     </div>
                     <div class="p-4 bg-gray-100 border-t flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
-                        <button id="printPdfBtn" data-name="${order.clientName}" data-id="${order.id}" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">PDF Pedido</button>
-                        <button id="printMockupsBtn" data-name="${order.clientName}" data-id="${order.id}" class="bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg">PDF Mockups</button>
+                        <button id="comprehensivePdfBtn" data-name="${order.clientName}" data-id="${order.id}" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">Gerar PDF do pedido</button>
                         <button id="closeViewBtn" class="bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg">Fechar</button>
                     </div>
                 </div>`;
@@ -1261,19 +1222,61 @@
             DOM.viewModal.classList.remove('hidden');
         };
 
-        const generateOrderPdf = async (clientName) => {
-            const content = document.getElementById('printableArea');
+        const generateComprehensivePdf = async (orderId, clientName) => {
+            const order = allOrders.find(o => o.id === orderId);
+            if (!order) return;
+
             try {
                 const { jsPDF } = window.jspdf;
-                const canvas = await html2canvas(content, { scale: 2, useCORS: true });
-                const imgData = canvas.toDataURL('image/png');
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                // Page 1: Order Details
+                const content = document.getElementById('printable-details');
+                const canvas = await html2canvas(content, { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
                 const imgProps = pdf.getImageProperties(imgData);
-                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                const pageHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pageHeight);
+
+                // Page 2+: Mockups
+                if (order.mockupUrls && order.mockupUrls.length > 0) {
+                    pdf.addPage();
+                    const margin = 10;
+                    let currentY = margin;
+
+                    for (const url of order.mockupUrls) {
+                        const img = new Image();
+                        img.crossOrigin = "anonymous";
+                        img.src = url;
+                        await new Promise(resolve => img.onload = resolve);
+                        
+                        const imgCanvas = document.createElement('canvas');
+                        imgCanvas.width = img.width;
+                        imgCanvas.height = img.height;
+                        const ctx = imgCanvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        const dataUrl = imgCanvas.toDataURL('image/png');
+                        
+                        const mockupProps = pdf.getImageProperties(dataUrl);
+                        const aspectRatio = mockupProps.width / mockupProps.height;
+                        let imgWidth = pdfWidth - (margin * 2);
+                        let imgHeight = imgWidth / aspectRatio;
+
+                        if (currentY + imgHeight > pdfHeight - margin) {
+                            pdf.addPage();
+                            currentY = margin;
+                        }
+
+                        const x = (pdfWidth - imgWidth) / 2;
+                        pdf.addImage(dataUrl, 'PNG', x, currentY, imgWidth, imgHeight);
+                        currentY += imgHeight + margin; 
+                    }
+                }
                 pdf.save(`Pedido_${clientName.replace(/\s/g, '_')}.pdf`);
             } catch (error) {
+                console.error("Erro ao gerar PDF:", error);
                 showInfoModal("Não foi possível gerar o PDF do pedido.");
             }
         };
@@ -1327,52 +1330,6 @@
                 showInfoModal("Não foi possível gerar o PDF do recibo.");
             } finally {
                 document.body.removeChild(tempContainer);
-            }
-        };
-
-        const generateMockupPdf = async (orderId, clientName) => {
-            const order = allOrders.find(o => o.id === orderId);
-            if (!order || !order.mockupUrls || order.mockupUrls.length === 0) {
-                showInfoModal("Este pedido não possui mockups para gerar PDF.");
-                return;
-            }
-            try {
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = pdf.internal.pageSize.getHeight();
-                const margin = 10;
-                for (let i = 0; i < order.mockupUrls.length; i++) {
-                    const url = order.mockupUrls[i];
-                    if (i > 0) { pdf.addPage(); }
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.src = url;
-                    await new Promise(resolve => img.onload = resolve);
-
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    const dataUrl = canvas.toDataURL('image/png');
-
-                    const imgProps = pdf.getImageProperties(dataUrl);
-                    const aspectRatio = imgProps.width / imgProps.height;
-                    let imgWidth = pdfWidth - (margin * 2);
-                    let imgHeight = imgWidth / aspectRatio;
-                    if (imgHeight > pdfHeight - (margin * 2)) {
-                        imgHeight = pdfHeight - (margin * 2);
-                        imgWidth = imgHeight * aspectRatio;
-                    }
-                    const x = (pdfWidth - imgWidth) / 2;
-                    const y = (pdfHeight - imgHeight) / 2;
-                    pdf.addImage(dataUrl, 'PNG', x, y, imgWidth, imgHeight);
-                }
-                pdf.save(`Mockups_${clientName.replace(/\s/g, '_')}.pdf`);
-            } catch (error) {
-                console.error("Erro ao gerar PDF dos mockups:", error);
-                showInfoModal("Não foi possível gerar o PDF dos mockups.");
             }
         };
         
@@ -1609,10 +1566,10 @@
         const markTransactionAsPaid = async (id) => {
              const transactionRef = doc(transactionsCollection, id);
              try {
-                await updateDoc(transactionRef, {
-                    status: 'pago',
-                    date: new Date().toISOString().split('T')[0]
-                });
+                 await updateDoc(transactionRef, {
+                     status: 'pago',
+                     date: new Date().toISOString().split('T')[0]
+                 });
              } catch(error) {
                  console.error("Erro ao marcar como recebido:", error);
                  showInfoModal("Não foi possível atualizar o lançamento.");
@@ -1742,11 +1699,8 @@
                 DOM.viewModal.classList.add('hidden');
                 DOM.viewModal.innerHTML = '';
             }
-            if (btn.id === 'printPdfBtn') {
-                generateOrderPdf(btn.dataset.name);
-            }
-            if (btn.id === 'printMockupsBtn') {
-                generateMockupPdf(btn.dataset.id, btn.dataset.name);
+            if (btn.id === 'comprehensivePdfBtn') {
+                generateComprehensivePdf(btn.dataset.id, btn.dataset.name);
             }
         });
 
