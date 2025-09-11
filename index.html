@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale-1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gerenciador de Pedidos</title>
     <link rel="icon" href="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -57,10 +57,10 @@
                 </div>
                 <div class="flex items-center gap-4">
                      <button id="priceTableBtn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center" title="Tabela de Preços">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a1 1 0 011-1h5a1 1 0 01.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                           <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a1 1 0 011-1h5a1 1 0 01.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+                         </svg>
+                     </button>
                     <button id="addOrderBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300 flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                         Novo Pedido
@@ -356,9 +356,9 @@
                 <input type="text" placeholder="Cor Principal" class="p-2 border rounded-md w-full part-color-main">
             </div>
             <div class="flex items-center space-x-2 pt-2 border-t">
-                 <span class="text-sm font-semibold text-gray-600">Tipo de Entrada:</span>
-                 <button type="button" class="part-type-selector" data-type="comum">Comum</button>
-                 <button type="button" class="part-type-selector" data-type="detalhado">Detalhado</button>
+               <span class="text-sm font-semibold text-gray-600">Tipo de Entrada:</span>
+               <button type="button" class="part-type-selector" data-type="comum">Comum</button>
+               <button type="button" class="part-type-selector" data-type="detalhado">Detalhado</button>
             </div>
             <div class="part-content-container mt-2"></div>
         </div>
@@ -427,7 +427,7 @@
 
         const IMGBB_API_KEY = "f012978df48f3596b193c06e05589442";
         
-        // CONFIGURAÇÃO PARA AMBIENTE DE PRODUÇÃO
+        // CONFIGURAÇÃO PARA AMBIENTE DE PRODUÇÃO (Clientes)
         const firebaseConfig = { 
           apiKey: "AIzaSyA8MxD_m6lKrrQKijlxQ0lQUQdC3OpTEv4", 
           authDomain: "saas-57e0d.firebaseapp.com", 
@@ -439,14 +439,17 @@
         
         const isProduction = firebaseConfig.projectId === 'saas-57e0d';
 
-        // O restante do código JavaScript permanece idêntico ao da versão de testes validada.
-        // Nenhuma lógica funcional foi alterada.
         let app, db, auth, userId = null, dbCollection, transactionsCollection, pricingCollection;
         let allOrders = [], allTransactions = [], allPricingItems = [];
         let partCounter = 0;
-        let userCompanyId = null;
+        let userCompanyId = null, userCompanyName = null;
         let currentDashboardView = 'orders';
         let currentOrdersView = 'pending';
+
+        const SIZES_ORDER = [
+            'PP', 'P', 'M', 'G', 'GG', 'XG',
+            '2 anos', '4 anos', '6 anos', '8 anos', '10 anos', '12 anos'
+        ];
 
         const DOM = {
             authContainer: document.getElementById('authContainer'),
@@ -546,15 +549,19 @@
             } catch (error) {
                 let errorMessage = "E-mail ou senha incorretos."; 
                 if (!isProduction) {
-                    // Este bloco de diagnóstico não será executado em produção, mas o mantemos por segurança.
                     switch (error.code) {
                         case 'auth/user-not-found':
+                            errorMessage = "Erro de Diagnóstico (Testes): Usuário não encontrado.";
+                            break;
                         case 'auth/wrong-password':
                         case 'auth/invalid-credential':
-                            errorMessage = "E-mail ou senha incorretos.";
+                            errorMessage = "Erro de Diagnóstico (Testes): Senha inválida para este e-mail.";
+                            break;
+                        case 'auth/user-disabled':
+                            errorMessage = "Erro de Diagnóstico (Testes): Esta conta de usuário foi desativada.";
                             break;
                         default:
-                            errorMessage = "Ocorreu um erro ao tentar fazer login.";
+                            errorMessage = `Erro de Diagnóstico (Testes): ${error.code}`;
                             break;
                     }
                 }
@@ -568,11 +575,21 @@
 
         const initializeAppLogic = async (user) => {
             userId = user.uid;
-            DOM.userEmail.textContent = user.email;
             const userMappingRef = doc(db, "user_mappings", userId);
             const userMappingSnap = await getDoc(userMappingRef);
+            
             if (userMappingSnap.exists()) {
                 userCompanyId = userMappingSnap.data().companyId;
+
+                const companyRef = doc(db, "companies", userCompanyId);
+                const companySnap = await getDoc(companyRef);
+                if (companySnap.exists() && companySnap.data().companyName) {
+                    userCompanyName = companySnap.data().companyName;
+                } else {
+                    userCompanyName = user.email; 
+                }
+                DOM.userEmail.textContent = userCompanyName;
+                
                 dbCollection = collection(db, `companies/${userCompanyId}/orders`);
                 transactionsCollection = collection(db, `companies/${userCompanyId}/transactions`);
                 pricingCollection = collection(db, `companies/${userCompanyId}/pricing`);
@@ -605,6 +622,7 @@
                         DOM.app.classList.add('hidden');
                         DOM.authContainer.classList.remove('hidden');
                         userCompanyId = null;
+                        userCompanyName = null;
                     }
                 });
             } catch (error) {
@@ -912,11 +930,11 @@
             
             const buttonsHtml = viewType === 'pending' 
                 ? `<button data-id="${order.id}" class="edit-btn p-2 rounded-md text-gray-500 hover:bg-yellow-100 hover:text-yellow-700 transition-colors" title="Editar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
-                   </button>` 
+                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
+                  </button>` 
                 : `<button data-id="${order.id}" class="replicate-btn p-2 rounded-md text-gray-500 hover:bg-green-100 hover:text-green-700 transition-colors" title="Replicar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" /><path d="M5 3a2 2 0 00-2 2v6a1 1 0 102 0V5h6a1 1 0 100-2H5z" /></svg>
-                   </button>`;
+                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" /><path d="M5 3a2 2 0 00-2 2v6a1 1 0 102 0V5h6a1 1 0 100-2H5z" /></svg>
+                  </button>`;
 
             return `
                 <div class="bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col space-y-3 transform hover:-translate-y-1">
@@ -1372,6 +1390,16 @@
             document.getElementById('orderDate').value = new Date().toISOString().split('T')[0];
             updateFinancials();
         };
+
+        const sortSizes = (sizesObject) => {
+            return Object.entries(sizesObject).sort((a, b) => {
+                const indexA = SIZES_ORDER.indexOf(a[0]);
+                const indexB = SIZES_ORDER.indexOf(b[0]);
+                if (indexA === -1) return 1;
+                if (indexB === -1) return -1;
+                return indexA - indexB;
+            });
+        };
         
         const viewOrder = (orderId) => {
             const order = allOrders.find(o => o.id === orderId);
@@ -1384,7 +1412,7 @@
                 let itemsDetailHtml = '';
                 if (p.partInputType === 'comum' && p.sizes && Object.keys(p.sizes).length > 0) {
                     itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + Object.entries(p.sizes).map(([cat, sizes]) =>
-                        `<strong>${cat}:</strong> ${Object.entries(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
+                        `<strong>${cat}:</strong> ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
                     ).join('<br>') + '</div>';
                 } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
                     itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + p.details.map(d => `${d.name || ''} - ${d.size || ''} - ${d.number || ''}`).join('<br>') + '</div>';
@@ -1476,7 +1504,8 @@
         const generateReceiptPdf = async (orderData) => {
             const totalValue = (orderData.parts || []).reduce((sum, p) => sum + (p.quantity * (p.unitPrice || 0)), 0);
             const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-            const companyUser = auth.currentUser ? auth.currentUser.email : 'Sua Empresa';
+            
+            const companyUser = userCompanyName || (auth.currentUser ? auth.currentUser.email : 'Sua Empresa');
 
             const receiptHtml = `
                 <div style="font-family: Arial, sans-serif; padding: 40px; border: 1px solid #eee; width: 700px; margin: auto; background-color: white;">
@@ -1757,15 +1786,15 @@
 
         const markTransactionAsPaid = async (id) => {
              const transactionRef = doc(transactionsCollection, id);
-               try {
-                   await updateDoc(transactionRef, {
-                       status: 'pago',
-                       date: new Date().toISOString().split('T')[0]
-                   });
-               } catch(error) {
-                   console.error("Erro ao marcar como recebido:", error);
-                   showInfoModal("Não foi possível atualizar o lançamento.");
-               }
+                try {
+                    await updateDoc(transactionRef, {
+                        status: 'pago',
+                        date: new Date().toISOString().split('T')[0]
+                    });
+                } catch(error) {
+                    console.error("Erro ao marcar como recebido:", error);
+                    showInfoModal("Não foi possível atualizar o lançamento.");
+                }
         };
         
         const checkBackupReminder = () => {
@@ -2025,6 +2054,33 @@
                            deleteDoc(doc(pricingCollection, id));
                         }
                     });
+                }
+            }
+        });
+
+        // Listener global para a tecla 'Escape'
+        window.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                if (!DOM.confirmModal.classList.contains('hidden')) {
+                    DOM.confirmCancelBtn.click();
+                } else if (!DOM.viewModal.classList.contains('hidden')) {
+                    // O botão de fechar do viewModal é gerado dinamicamente
+                    document.getElementById('closeViewBtn')?.click();
+                } else if (!DOM.orderModal.classList.contains('hidden')) {
+                    DOM.cancelBtn.click();
+                } else if (!DOM.priceTableModal.classList.contains('hidden')) {
+                    // Verifica se está em modo de edição ou visualização
+                    if (!DOM.cancelPriceTableBtn.classList.contains('hidden')) {
+                        DOM.cancelPriceTableBtn.click();
+                    } else {
+                        DOM.closePriceTableBtn.click();
+                    }
+                } else if (!DOM.transactionModal.classList.contains('hidden')) {
+                    DOM.cancelTransactionBtn.click();
+                } else if (!DOM.optionsModal.classList.contains('hidden')) {
+                    DOM.closeOptionsModalBtn.click();
+                } else if (!DOM.infoModal.classList.contains('hidden')) {
+                    DOM.infoModalCloseBtn.click();
                 }
             }
         });
