@@ -53,13 +53,13 @@
             <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <div class="flex items-center">
                     <img src="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png" alt="Logo" class="h-8 w-auto mr-3">
-                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos</h1>
+                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos1 </h1>
                 </div>
                 <div class="flex items-center gap-4">
                      <button id="priceTableBtn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center" title="Tabela de Preços">
-                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                            <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a1 1 0 011-1h5a1 1 0 01.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
-                         </svg>
+                          </svg>
                      </button>
                     <button id="addOrderBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300 flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -364,8 +364,20 @@
         </div>
     </template>
     <template id="comumPartContentTemplate">
-        <button type="button" class="toggle-sizes-btn mt-2 bg-blue-100 text-blue-800 text-sm font-semibold py-1 px-3 rounded-lg hover:bg-blue-200">Tamanhos</button>
+        <button type="button" class="toggle-sizes-btn mt-2 bg-blue-100 text-blue-800 text-sm font-semibold py-1 px-3 rounded-lg hover:bg-blue-200">Tamanhos Padrão</button>
         <div class="sizes-grid hidden mt-3 space-y-4"></div>
+        <div class="border-t mt-4 pt-3">
+            <div class="specific-sizes-list space-y-2"></div>
+            <button type="button" class="add-specific-size-btn mt-2 bg-gray-200 text-gray-800 text-sm py-1 px-3 rounded-lg hover:bg-gray-300">+ Adicionar Tamanho Específico</button>
+        </div>
+    </template>
+    <template id="specificSizeRowTemplate">
+        <div class="specific-size-row grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-3"><input type="text" placeholder="Largura (cm)" class="p-1 border rounded-md w-full text-sm item-spec-width"></div>
+            <div class="col-span-3"><input type="text" placeholder="Altura (cm)" class="p-1 border rounded-md w-full text-sm item-spec-height"></div>
+            <div class="col-span-5"><input type="text" placeholder="Observações (ex: manga +5cm)" class="p-1 border rounded-md w-full text-sm item-spec-obs"></div>
+            <div class="col-span-1 flex justify-center"><button type="button" class="remove-specific-row-btn text-red-500 font-bold">&times;</button></div>
+        </div>
     </template>
     <template id="detalhadoPartContentTemplate">
         <div class="detailed-items-list space-y-2 mt-3">
@@ -380,7 +392,10 @@
     </template>
     <template id="financialRowTemplate">
         <div class="financial-item grid grid-cols-4 gap-4 items-end">
-            <p class="font-semibold financial-part-name col-span-1 self-center">Peça 1</p>
+            <div class="font-semibold financial-part-name col-span-1 self-center">
+                <span>Peça 1</span>
+                <span class="block text-xs font-normal text-gray-500 price-group-label"></span>
+            </div>
             <div>
                 <label class="text-xs font-semibold text-gray-600">Quantidade</label>
                 <input type="number" class="p-2 border rounded-md w-full bg-gray-100 financial-quantity" readonly>
@@ -548,7 +563,7 @@
                 await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
                 let errorMessage = "E-mail ou senha incorretos."; 
-                if (!isProduction) {
+                if (!isProduction) { // This block will not run in production
                     switch (error.code) {
                         case 'auth/user-not-found':
                             errorMessage = "Erro de Diagnóstico (Testes): Usuário não encontrado.";
@@ -914,7 +929,11 @@
         const generateOrderCardHTML = (order, viewType) => {
             let totalValue = 0;
             (order.parts || []).forEach(p => {
-                totalValue += (p.quantity || 0) * (p.unitPrice || 0);
+                 const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+                 const specificQty = (p.specifics || []).length;
+                 const standardSub = standardQty * (p.unitPriceStandard || p.unitPrice || 0);
+                 const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
+                 totalValue += standardSub + specificSub;
             });
             const countdown = getDeliveryCountdown(order.deliveryDate);
             const countdownColorClasses = {
@@ -963,22 +982,28 @@
         };
         
         const handleBackup = () => {
-            if (allOrders.length === 0) {
-                showInfoModal("Não há pedidos para fazer backup.");
+            if (allOrders.length === 0 && allTransactions.length === 0) {
+                showInfoModal("Não há dados para fazer backup.");
                 return;
             }
-            const dataStr = JSON.stringify(allOrders.map(({ id, ...rest }) => rest), null, 2);
+            
+            const backupData = {
+                orders: allOrders.map(({ id, ...rest }) => rest),
+                transactions: allTransactions.map(({ id, ...rest }) => rest)
+            };
+            
+            const dataStr = JSON.stringify(backupData, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
             const link = document.createElement('a');
             const date = new Date().toISOString().split('T')[0];
-            link.download = `backup-pedidos-${date}.json`;
+            link.download = `backup-completo-${date}.json`;
             link.href = url;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            showInfoModal("Backup gerado com sucesso!");
+            showInfoModal("Backup completo gerado com sucesso!");
             localStorage.setItem(`backupTimestamp_${userCompanyId}`, Date.now());
         };
 
@@ -988,45 +1013,91 @@
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
-                    const ordersFromFile = JSON.parse(e.target.result);
-                    if (!Array.isArray(ordersFromFile)) throw new Error("Formato inválido.");
-                    await processRestore(ordersFromFile);
+                    const dataFromFile = JSON.parse(e.target.result);
+                    let ordersToRestore = [];
+                    let transactionsToRestore = [];
+
+                    // Retro-compatibility check
+                    if (Array.isArray(dataFromFile)) { // Old format (just an array of orders)
+                        ordersToRestore = dataFromFile;
+                        showInfoModal("Backup de formato antigo detectado. Apenas os pedidos serão restaurados.");
+                    } else if (typeof dataFromFile === 'object' && dataFromFile.orders) { // New format
+                        ordersToRestore = dataFromFile.orders || [];
+                        transactionsToRestore = dataFromFile.transactions || [];
+                    } else {
+                        throw new Error("Formato de arquivo de backup inválido.");
+                    }
+                    
+                    if (!Array.isArray(ordersToRestore) || !Array.isArray(transactionsToRestore)) {
+                         throw new Error("Dados de backup corrompidos.");
+                    }
+
+                    await processRestore(ordersToRestore, transactionsToRestore);
                 } catch (error) {
-                    showInfoModal("Arquivo de backup inválido.");
+                    console.error("Erro na restauração:", error);
+                    showInfoModal("Arquivo de backup inválido ou corrompido.");
                 }
             };
             reader.readAsText(file);
-            event.target.value = '';
+            event.target.value = ''; // Reset input to allow re-uploading the same file
         };
 
-        const processRestore = async (ordersFromFile) => {
-            const choice = await showConfirmModal("Escolha o modo de importação:", "Adicionar", "Substituir");
-            if (choice === null) return;
-            if (choice) {
+        const processRestore = async (ordersToRestore, transactionsToRestore) => {
+            const choice = await showConfirmModal("Escolha o modo de importação:", "Adicionar aos existentes", "Substituir tudo");
+            if (choice === null) return; // User cancelled
+
+            if (choice) { // ADICIONAR
                 const batch = writeBatch(db);
-                ordersFromFile.forEach(order => {
-                    const newDocRef = doc(collection(db, `companies/${userCompanyId}/orders`));
+                ordersToRestore.forEach(order => {
+                    const newDocRef = doc(dbCollection); // dbCollection is orders
                     batch.set(newDocRef, order);
                 });
+                transactionsToRestore.forEach(transaction => {
+                    const newDocRef = doc(transactionsCollection);
+                    batch.set(newDocRef, transaction);
+                });
                 await batch.commit();
-                showInfoModal(`${ordersFromFile.length} pedidos foram ADICIONADOS.`);
-            } else {
+                showInfoModal(`${ordersToRestore.length} pedido(s) e ${transactionsToRestore.length} lançamento(s) foram ADICIONADOS.`);
+            } else { // SUBSTITUIR
                 const confirmReplace = await showConfirmModal(
-                    "ATENÇÃO: Isto vai APAGAR TODOS os seus pedidos atuais. A ação NÃO PODE SER DESFEITA. Continuar?",
-                    "Sim, substituir",
+                    "ATENÇÃO: Isto vai APAGAR TODOS os seus pedidos E lançamentos financeiros atuais. A ação NÃO PODE SER DESFEITA. Continuar?",
+                    "Sim, substituir tudo",
                     "Cancelar"
                 );
                 if (confirmReplace) {
-                    const allDocsQuery = query(collection(db, `companies/${userCompanyId}/orders`));
-                    const allDocsSnap = await getDocs(allDocsQuery);
+                    // --- Deletion Phase ---
                     const deleteBatch = writeBatch(db);
-                    allDocsSnap.forEach(docSnap => deleteBatch.delete(docSnap.ref));
-                    await deleteBatch.commit();
+                    const allOrdersQuery = query(dbCollection);
+                    const allTransactionsQuery = query(transactionsCollection);
+                    
+                    const [ordersSnap, transactionsSnap] = await Promise.all([
+                        getDocs(allOrdersQuery),
+                        getDocs(allTransactionsQuery)
+                    ]);
 
+                    ordersSnap.forEach(docSnap => deleteBatch.delete(docSnap.ref));
+                    transactionsSnap.forEach(docSnap => deleteBatch.delete(docSnap.ref));
+                    
+                    if(ordersSnap.size > 0 || transactionsSnap.size > 0) {
+                        await deleteBatch.commit();
+                    }
+
+                    // --- Addition Phase ---
                     const addBatch = writeBatch(db);
-                    ordersFromFile.forEach(order => addBatch.set(doc(collection(db, `companies/${userCompanyId}/orders`)), order));
-                    await addBatch.commit();
-                    showInfoModal(`Pedidos substituídos. ${ordersFromFile.length} novos pedidos importados.`);
+                    ordersToRestore.forEach(order => {
+                        const newDocRef = doc(dbCollection);
+                        addBatch.set(newDocRef, order);
+                    });
+                    transactionsToRestore.forEach(transaction => {
+                        const newDocRef = doc(transactionsCollection);
+                        addBatch.set(newDocRef, transaction);
+                    });
+
+                    if (ordersToRestore.length > 0 || transactionsToRestore.length > 0) {
+                        await addBatch.commit();
+                    }
+                    
+                    showInfoModal(`Dados substituídos. ${ordersToRestore.length} pedido(s) e ${transactionsToRestore.length} lançamento(s) importados.`);
                 }
             }
         };
@@ -1045,25 +1116,6 @@
             DOM.remainingTotal.textContent = `R$ ${(grandTotal - downPayment).toFixed(2)}`;
         };
         
-        const updatePartQuantity = (partId, partElement) => {
-            if (!partElement) return;
-            let totalQuantity = 0;
-            const partType = partElement.dataset.partType;
-
-            if (partType === 'comum') {
-                partElement.querySelectorAll('.size-input').forEach(input => {
-                    totalQuantity += parseInt(input.value) || 0;
-                });
-            } else {
-                totalQuantity = partElement.querySelectorAll('.detailed-item-row').length;
-            }
-            const financialRow = DOM.financialsContainer.querySelector(`.financial-item[data-part-id="${partId}"]`);
-            if (financialRow) {
-                financialRow.querySelector('.financial-quantity').value = totalQuantity;
-            }
-            updateFinancials();
-        };
-
         const fileToBase64 = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
@@ -1095,28 +1147,21 @@
             partItem.dataset.partId = partCounter;
             partItem.dataset.partType = partData.partInputType || 'comum';
             
-            partItem.querySelector('.part-type').value = partData.type || '';
+            const partTypeInput = partItem.querySelector('.part-type');
+            partTypeInput.value = partData.type || '';
             partItem.querySelector('.part-material').value = partData.material || '';
             partItem.querySelector('.part-color-main').value = partData.colorMain || '';
+            
+            partTypeInput.addEventListener('input', renderFinancialSection);
             
             addContentToPart(partItem, partData);
             DOM.partsContainer.appendChild(partItem);
             
-            const finTpl = document.getElementById('financialRowTemplate').content.cloneNode(true);
-            const finItem = finTpl.querySelector('.financial-item');
-            finItem.dataset.partId = partCounter;
-            finItem.querySelector('.financial-part-name').textContent = partData.type || `Peça ${partCounter}`;
-            finItem.querySelector('.financial-price').value = partData.unitPrice || '';
-            finItem.querySelector('.financial-price').addEventListener('input', updateFinancials);
-            DOM.financialsContainer.appendChild(finItem);
+            renderFinancialSection();
             
-            partItem.querySelector('.part-type').addEventListener('input', (e) => {
-                finItem.querySelector('.financial-part-name').textContent = e.target.value || `Peça ${partCounter}`;
-            });
             partItem.querySelector('.remove-part-btn').addEventListener('click', () => {
                 partItem.remove();
-                finItem.remove();
-                updateFinancials();
+                renderFinancialSection();
             });
             partItem.querySelectorAll('.manage-options-btn').forEach(btn => btn.addEventListener('click', (e) => openOptionsModal(e.target.dataset.type)));
             partItem.querySelectorAll('.part-type-selector').forEach(btn => {
@@ -1124,13 +1169,9 @@
                     const newType = e.target.dataset.type;
                     partItem.dataset.partType = newType;
                     addContentToPart(partItem, {}); 
-                    updatePartQuantity(partCounter, partItem);
+                    renderFinancialSection();
                 });
             });
-
-            if (partData.sizes || partData.details) {
-                updatePartQuantity(partCounter, partItem);
-            }
         };
 
         const addContentToPart = (partItem, partData = {}) => {
@@ -1145,6 +1186,7 @@
 
             if (partType === 'comum') {
                 const comumTpl = document.getElementById('comumPartContentTemplate').content.cloneNode(true);
+                
                 const sizesGrid = comumTpl.querySelector('.sizes-grid');
                 const categories = {
                     'Baby Look': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
@@ -1165,10 +1207,32 @@
                     gridHtml += '</div></div>';
                 }
                 sizesGrid.innerHTML = gridHtml;
+                
+                const specificList = comumTpl.querySelector('.specific-sizes-list');
+                const addSpecificRow = (spec = {}) => {
+                    const specTpl = document.getElementById('specificSizeRowTemplate').content.cloneNode(true);
+                    specTpl.querySelector('.item-spec-width').value = spec.width || '';
+                    specTpl.querySelector('.item-spec-height').value = spec.height || '';
+                    specTpl.querySelector('.item-spec-obs').value = spec.observation || '';
+                    specTpl.querySelector('.remove-specific-row-btn').addEventListener('click', (e) => {
+                        e.target.closest('.specific-size-row').remove();
+                        renderFinancialSection();
+                    });
+                    specificList.appendChild(specTpl);
+                };
+
+                (partData.specifics || []).forEach(addSpecificRow);
+
+                comumTpl.querySelector('.add-specific-size-btn').addEventListener('click', () => {
+                    addSpecificRow();
+                    renderFinancialSection();
+                });
+
                 comumTpl.querySelector('.toggle-sizes-btn').addEventListener('click', (e) => e.target.nextElementSibling.classList.toggle('hidden'));
-                sizesGrid.addEventListener('input', () => updatePartQuantity(partId, partItem));
+                sizesGrid.addEventListener('input', renderFinancialSection);
                 contentContainer.appendChild(comumTpl);
-            } else {
+
+            } else { // Modo 'detalhado'
                 const detalhadoTpl = document.getElementById('detalhadoPartContentTemplate').content.cloneNode(true);
                 const listContainer = detalhadoTpl.querySelector('.detailed-items-list');
                 const addRow = (detail = {}) => {
@@ -1181,17 +1245,66 @@
                         <div class="col-span-1 flex justify-center"><button type="button" class="remove-detailed-row text-red-500 font-bold">&times;</button></div>`;
                     row.querySelector('.remove-detailed-row').addEventListener('click', () => {
                         row.remove();
-                        updatePartQuantity(partId, partItem);
+                        renderFinancialSection();
                     });
                     listContainer.appendChild(row);
                 };
                 (partData.details || [{}]).forEach(addRow);
                 detalhadoTpl.querySelector('.add-detailed-row-btn').addEventListener('click', () => {
                     addRow();
-                    updatePartQuantity(partId, partItem);
+                    renderFinancialSection();
                 });
                 contentContainer.appendChild(detalhadoTpl);
             }
+        };
+
+        const createFinancialRow = (partId, name, quantity, priceGroup) => {
+            const finTpl = document.getElementById('financialRowTemplate').content.cloneNode(true);
+            const finItem = finTpl.querySelector('.financial-item');
+            finItem.dataset.partId = partId;
+            finItem.dataset.priceGroup = priceGroup;
+
+            finItem.querySelector('.financial-part-name > span:first-child').textContent = name;
+            const label = priceGroup === 'standard' ? '(Padrão)' : priceGroup === 'specific' ? '(Específico)' : '';
+            finItem.querySelector('.price-group-label').textContent = label;
+
+            finItem.querySelector('.financial-quantity').value = quantity;
+            finItem.querySelector('.financial-price').addEventListener('input', updateFinancials);
+
+            return finItem;
+        };
+
+        const renderFinancialSection = () => {
+            DOM.financialsContainer.innerHTML = '';
+            DOM.partsContainer.querySelectorAll('.part-item').forEach(partItem => {
+                const partId = partItem.dataset.partId;
+                const partName = partItem.querySelector('.part-type').value || `Peça ${partId}`;
+                const partType = partItem.dataset.partType;
+
+                if (partType === 'comum') {
+                    let standardQty = 0;
+                    partItem.querySelectorAll('.size-input').forEach(input => {
+                        standardQty += parseInt(input.value) || 0;
+                    });
+                    const specificQty = partItem.querySelectorAll('.specific-size-row').length;
+
+                    if (standardQty > 0) {
+                        const finRow = createFinancialRow(partId, partName, standardQty, 'standard');
+                        DOM.financialsContainer.appendChild(finRow);
+                    }
+                    if (specificQty > 0) {
+                        const finRow = createFinancialRow(partId, partName, specificQty, 'specific');
+                        DOM.financialsContainer.appendChild(finRow);
+                    }
+                } else { // detalhado
+                    const totalQty = partItem.querySelectorAll('.detailed-item-row').length;
+                    if (totalQty > 0) {
+                       const finRow = createFinancialRow(partId, partName, totalQty, 'detailed');
+                       DOM.financialsContainer.appendChild(finRow);
+                    }
+                }
+            });
+            updateFinancials();
         };
 
         const collectFormData = () => {
@@ -1207,18 +1320,20 @@
                 paymentMethod: document.getElementById('paymentMethod').value,
                 mockupUrls: Array.from(document.getElementById('existingFilesContainer').querySelectorAll('a')).map(a => a.href)
             };
+            
             DOM.partsContainer.querySelectorAll('.part-item').forEach(pItem => {
                 const partId = pItem.dataset.partId;
-                const finRow = DOM.financialsContainer.querySelector(`.financial-item[data-part-id="${partId}"]`);
                 const part = {
                     type: pItem.querySelector('.part-type').value,
                     material: pItem.querySelector('.part-material').value,
                     colorMain: pItem.querySelector('.part-color-main').value,
-                    quantity: parseInt(finRow.querySelector('.financial-quantity').value) || 0,
-                    unitPrice: parseFloat(finRow.querySelector('.financial-price').value) || 0,
                     partInputType: pItem.dataset.partType,
                     sizes: {},
-                    details: []
+                    details: [],
+                    specifics: [],
+                    unitPriceStandard: 0,
+                    unitPriceSpecific: 0,
+                    unitPrice: 0 // For detailed type and backward compatibility
                 };
 
                 if (part.partInputType === 'comum') {
@@ -1229,7 +1344,21 @@
                             part.sizes[category][size] = parseInt(input.value, 10);
                         }
                     });
-                } else {
+                    pItem.querySelectorAll('.specific-size-row').forEach(row => {
+                        const width = row.querySelector('.item-spec-width').value.trim();
+                        const height = row.querySelector('.item-spec-height').value.trim();
+                        const observation = row.querySelector('.item-spec-obs').value.trim();
+                        if (width || height || observation) {
+                           part.specifics.push({ width, height, observation });
+                        }
+                    });
+                    const standardPriceRow = DOM.financialsContainer.querySelector(`.financial-item[data-part-id="${partId}"][data-price-group="standard"]`);
+                    if(standardPriceRow) part.unitPriceStandard = parseFloat(standardPriceRow.querySelector('.financial-price').value) || 0;
+                    
+                    const specificPriceRow = DOM.financialsContainer.querySelector(`.financial-item[data-part-id="${partId}"][data-price-group="specific"]`);
+                    if(specificPriceRow) part.unitPriceSpecific = parseFloat(specificPriceRow.querySelector('.financial-price').value) || 0;
+
+                } else { // detalhado
                     pItem.querySelectorAll('.detailed-item-row').forEach(row => {
                         const name = row.querySelector('.item-det-name').value;
                         const size = row.querySelector('.item-det-size').value;
@@ -1238,6 +1367,8 @@
                             part.details.push({ name, size, number });
                         }
                     });
+                    const detailedPriceRow = DOM.financialsContainer.querySelector(`.financial-item[data-part-id="${partId}"][data-price-group="detailed"]`);
+                    if(detailedPriceRow) part.unitPrice = parseFloat(detailedPriceRow.querySelector('.financial-price').value) || 0;
                 }
                 orderData.parts.push(part);
             });
@@ -1289,13 +1420,10 @@
             }
         };
 
-        const editOrder = (orderId) => {
-            const orderData = allOrders.find(o => o.id === orderId);
-            if (!orderData) return;
-
+        const editOrder = (orderData) => {
             resetForm();
             
-            document.getElementById('orderId').value = orderId;
+            document.getElementById('orderId').value = orderData.id;
             document.getElementById('modalTitle').textContent = 'Editar Pedido';
             document.getElementById('clientName').value = orderData.clientName;
             document.getElementById('clientPhone').value = orderData.clientPhone;
@@ -1332,11 +1460,31 @@
             }
 
             (orderData.parts || []).forEach(addPart);
+            
+            // Populate prices after financial rows are rendered
+            DOM.financialsContainer.querySelectorAll('.financial-item').forEach(finRow => {
+                const partId = finRow.dataset.partId;
+                const priceGroup = finRow.dataset.priceGroup;
+                const part = orderData.parts[partId - 1];
+                if (!part) return;
+
+                if (priceGroup === 'standard') {
+                    finRow.querySelector('.financial-price').value = part.unitPriceStandard || part.unitPrice || '';
+                } else if (priceGroup === 'specific') {
+                    finRow.querySelector('.financial-price').value = part.unitPriceSpecific || part.unitPrice || '';
+                } else if (priceGroup === 'detailed') {
+                    finRow.querySelector('.financial-price').value = part.unitPrice || '';
+                }
+            });
+
+            updateFinancials();
             DOM.orderModal.classList.remove('hidden');
         };
 
         const replicateOrder = (orderId) => {
-            editOrder(orderId);
+            const orderData = allOrders.find(o => o.id === orderId);
+            if (!orderData) return;
+            editOrder(orderData);
             document.getElementById('orderId').value = '';
             document.getElementById('modalTitle').textContent = 'Novo Pedido (Replicado)';
             document.getElementById('orderStatus').value = 'Pendente';
@@ -1407,23 +1555,58 @@
 
             let totalValue = 0;
             let partsHtml = (order.parts || []).map(p => {
-                const subtotal = (p.quantity || 0) * (p.unitPrice || 0);
+                const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+                const specificQty = (p.specifics || []).length;
+                const detailedQty = (p.details || []).length;
+
+                const standardSub = standardQty * (p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0);
+                const specificSub = specificQty * (p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0);
+                const detailedSub = detailedQty * (p.unitPrice || 0);
+
+                const subtotal = standardSub + specificSub + detailedSub;
                 totalValue += subtotal;
+
                 let itemsDetailHtml = '';
-                if (p.partInputType === 'comum' && p.sizes && Object.keys(p.sizes).length > 0) {
-                    itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + Object.entries(p.sizes).map(([cat, sizes]) =>
-                        `<strong>${cat}:</strong> ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
-                    ).join('<br>') + '</div>';
+                
+                if (p.partInputType === 'comum') {
+                    let standardSizesHtml = '';
+                    if (p.sizes && Object.keys(p.sizes).length > 0) {
+                         standardSizesHtml = Object.entries(p.sizes).map(([cat, sizes]) =>
+                             `<strong>${cat}:</strong> ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
+                         ).join('<br>');
+                    }
+                    
+                    let specificSizesHtml = '';
+                    if (p.specifics && p.specifics.length > 0) {
+                        specificSizesHtml = '<br><strong>Específicos:</strong><br>' + p.specifics.map(s => 
+                            `&nbsp;&nbsp;- L: ${s.width || 'N/A'}, A: ${s.height || 'N/A'} (${s.observation || 'Sem obs.'})`
+                        ).join('<br>');
+                    }
+
+                    if (standardSizesHtml || specificSizesHtml) {
+                       itemsDetailHtml = `<div class="text-xs text-gray-600 pl-2 mt-1">${standardSizesHtml}${specificSizesHtml}</div>`;
+                    }
+
                 } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
                     itemsDetailHtml = '<div class="text-xs text-gray-600 pl-2 mt-1">' + p.details.map(d => `${d.name || ''} - ${d.size || ''} - ${d.number || ''}`).join('<br>') + '</div>';
                 }
+
+                let unitPriceHtml = '';
+                if(p.partInputType === 'comum') {
+                    if(standardQty > 0) unitPriceHtml += `R$ ${(p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0).toFixed(2)} (Padrão)<br>`;
+                    if(specificQty > 0) unitPriceHtml += `R$ ${(p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0).toFixed(2)} (Específico)`;
+                } else {
+                    unitPriceHtml = `R$ ${(p.unitPrice || 0).toFixed(2)}`;
+                }
+
+
                 return `
                     <tr>
                         <td class="py-1 px-2 border">${p.type}${itemsDetailHtml}</td>
                         <td class="py-1 px-2 border">${p.material}</td>
                         <td class="py-1 px-2 border">${p.colorMain}</td>
-                        <td class="py-1 px-2 border text-center">${p.quantity}</td>
-                        <td class="py-1 px-2 border text-right">R$ ${(p.unitPrice || 0).toFixed(2)}</td>
+                        <td class="py-1 px-2 border text-center">${standardQty + specificQty + detailedQty}</td>
+                        <td class="py-1 px-2 border text-right">${unitPriceHtml}</td>
                         <td class="py-1 px-2 border text-right font-semibold">R$ ${subtotal.toFixed(2)}</td>
                     </tr>`;
             }).join('');
@@ -1502,7 +1685,15 @@
         };
         
         const generateReceiptPdf = async (orderData) => {
-            const totalValue = (orderData.parts || []).reduce((sum, p) => sum + (p.quantity * (p.unitPrice || 0)), 0);
+            let totalValue = 0;
+            (orderData.parts || []).forEach(p => {
+                 const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+                 const specificQty = (p.specifics || []).length;
+                 const standardSub = standardQty * (p.unitPriceStandard || p.unitPrice || 0);
+                 const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
+                 totalValue += standardSub + specificSub;
+            });
+
             const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
             
             const companyUser = userCompanyName || (auth.currentUser ? auth.currentUser.email : 'Sua Empresa');
@@ -1786,15 +1977,15 @@
 
         const markTransactionAsPaid = async (id) => {
              const transactionRef = doc(transactionsCollection, id);
-                try {
-                    await updateDoc(transactionRef, {
-                        status: 'pago',
-                        date: new Date().toISOString().split('T')[0]
-                    });
-                } catch(error) {
-                    console.error("Erro ao marcar como recebido:", error);
-                    showInfoModal("Não foi possível atualizar o lançamento.");
-                }
+                 try {
+                     await updateDoc(transactionRef, {
+                         status: 'pago',
+                         date: new Date().toISOString().split('T')[0]
+                     });
+                 } catch(error) {
+                     console.error("Erro ao marcar como recebido:", error);
+                     showInfoModal("Não foi possível atualizar o lançamento.");
+                 }
         };
         
         const checkBackupReminder = () => {
@@ -1900,8 +2091,11 @@
             const btn = e.target.closest('button');
             if (!btn) return;
             const id = btn.dataset.id;
-            if (btn.classList.contains('edit-btn')) editOrder(id);
-            if (btn.classList.contains('replicate-btn')) replicateOrder(id);
+            const order = allOrders.find(o => o.id === id);
+            if (!order) return;
+            
+            if (btn.classList.contains('edit-btn')) editOrder(order);
+            if (btn.classList.contains('replicate-btn')) replicateOrder(order.id);
             if (btn.classList.contains('delete-btn')) deleteOrder(id);
             if (btn.classList.contains('view-btn')) viewOrder(id);
         });
@@ -2058,18 +2252,15 @@
             }
         });
 
-        // Listener global para a tecla 'Escape'
         window.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 if (!DOM.confirmModal.classList.contains('hidden')) {
                     DOM.confirmCancelBtn.click();
                 } else if (!DOM.viewModal.classList.contains('hidden')) {
-                    // O botão de fechar do viewModal é gerado dinamicamente
                     document.getElementById('closeViewBtn')?.click();
                 } else if (!DOM.orderModal.classList.contains('hidden')) {
                     DOM.cancelBtn.click();
                 } else if (!DOM.priceTableModal.classList.contains('hidden')) {
-                    // Verifica se está em modo de edição ou visualização
                     if (!DOM.cancelPriceTableBtn.classList.contains('hidden')) {
                         DOM.cancelPriceTableBtn.click();
                     } else {
