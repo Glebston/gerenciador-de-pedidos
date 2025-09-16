@@ -44,6 +44,9 @@
                     <input type="password" id="loginPassword" placeholder="Senha" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
                 </div>
                 <button type="submit" class="w-full px-4 py-2 mt-6 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">Entrar</button>
+                 <div class="mt-4 text-center">
+                    <a href="#" id="forgotPasswordBtn" class="text-sm text-blue-600 hover:underline">Esqueci minha senha</a>
+                </div>
             </form>
         </div>
     </div>
@@ -53,7 +56,7 @@
             <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <div class="flex items-center">
                     <img src="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png" alt="Logo" class="h-8 w-auto mr-3">
-                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos</h1>
+                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos1</h1>
                 </div>
                 <div class="flex items-center gap-4">
                      <button id="priceTableBtn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center" title="Tabela de Preços">
@@ -70,14 +73,16 @@
                             <span id="userEmail" class="hidden sm:inline"></span>
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-5.5-2.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM10 12a5.99 5.99 0 00-4.793 2.39A6.483 6.483 0 0010 16.5a6.483 6.483 0 004.793-2.11A5.99 5.99 0 0010 12z" clip-rule="evenodd" /></svg>
                         </button>
-                        <div id="userDropdown" class="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 hidden ring-1 ring-black ring-opacity-5">
+                        <div id="userDropdown" class="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-50 hidden ring-1 ring-black ring-opacity-5">
                             <a href="#" id="financeDashboardBtn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Financeiro</a>
                             <div class="border-t border-gray-100"></div>
                             <a href="#" id="backupBtn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Fazer Backup</a>
                             <label for="restoreFile" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">Importar Backup</label>
                             <input type="file" id="restoreFile" class="hidden" accept=".json">
                             <a href="#" id="toggleViewBtn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Ver Entregues</a>
-                             <div class="border-t border-gray-100"></div>
+                            <div class="border-t border-gray-100"></div>
+                            <a href="#" id="requestDeletionBtn" class="block px-4 py-2 text-sm text-yellow-700 hover:bg-yellow-50">Solicitar Exclusão de Conta</a>
+                            <div class="border-t border-gray-100"></div>
                             <a href="#" id="logoutBtn" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">Sair</a>
                         </div>
                     </div>
@@ -340,6 +345,20 @@
             </form>
         </div>
     </div>
+    
+    <div id="forgotPasswordModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-[70] hidden modal-enter">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full">
+            <h3 class="text-xl font-bold mb-4">Redefinir Senha</h3>
+            <p class="text-gray-600 mb-6">Por favor, digite o e-mail da sua conta para enviarmos um link de redefinição.</p>
+            <div class="space-y-4">
+                <input type="email" id="resetEmailInput" placeholder="E-mail" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div class="flex justify-end gap-4 mt-6">
+                <button id="cancelResetBtn" class="flex-1 bg-gray-200 text-gray-800 font-semibold py-2 px-6 rounded-lg hover:bg-gray-300">Cancelar</button>
+                <button id="sendResetEmailBtn" class="flex-1 bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700">Enviar E-mail</button>
+            </div>
+        </div>
+    </div>
 
     <template id="partTemplate">
         <div class="part-item border p-4 rounded-md bg-gray-50 relative space-y-3">
@@ -438,11 +457,11 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc, updateDoc, deleteDoc, query, writeBatch, getDocs, serverTimestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         const IMGBB_API_KEY = "f012978df48f3596b193c06e05589442";
         
-        // CONFIGURAÇÃO PARA AMBIENTE DE PRODUÇÃO (Clientes)
+        // CONFIGURAÇÃO PARA AMBIENTE DE PRODUÇÃO
         const firebaseConfig = { 
           apiKey: "AIzaSyA8MxD_m6lKrrQKijlxQ0lQUQdC3OpTEv4", 
           authDomain: "saas-57e0d.firebaseapp.com", 
@@ -469,6 +488,7 @@
         const DOM = {
             authContainer: document.getElementById('authContainer'),
             loginForm: document.getElementById('loginForm'),
+            forgotPasswordBtn: document.getElementById('forgotPasswordBtn'),
             logoutBtn: document.getElementById('logoutBtn'),
             userEmail: document.getElementById('userEmail'),
             app: document.getElementById('app'),
@@ -514,6 +534,7 @@
             financeDashboardBtn: document.getElementById('financeDashboardBtn'),
             userMenuBtn: document.getElementById('userMenuBtn'),
             userDropdown: document.getElementById('userDropdown'),
+            requestDeletionBtn: document.getElementById('requestDeletionBtn'),
             transactionModal: document.getElementById('transactionModal'),
             transactionForm: document.getElementById('transactionForm'),
             transactionModalTitle: document.getElementById('transactionModalTitle'),
@@ -548,11 +569,74 @@
             savePriceTableBtn: document.getElementById('savePriceTableBtn'),
             cancelPriceTableBtn: document.getElementById('cancelPriceTableBtn'),
             closePriceTableBtn: document.getElementById('closePriceTableBtn'),
+            // Modal de Redefinição de Senha
+            forgotPasswordModal: document.getElementById('forgotPasswordModal'),
+            resetEmailInput: document.getElementById('resetEmailInput'),
+            sendResetEmailBtn: document.getElementById('sendResetEmailBtn'),
+            cancelResetBtn: document.getElementById('cancelResetBtn'),
         };
 
         const showInfoModal = (message) => {
             DOM.infoModalMessage.textContent = message;
             DOM.infoModal.classList.remove('hidden');
+        };
+
+        const showForgotPasswordModal = () => {
+            return new Promise((resolve) => {
+                DOM.resetEmailInput.value = '';
+                DOM.forgotPasswordModal.classList.remove('hidden');
+                DOM.resetEmailInput.focus();
+
+                const handleSend = () => {
+                    cleanupAndResolve(DOM.resetEmailInput.value.trim());
+                };
+
+                const handleCancel = () => {
+                    cleanupAndResolve(null);
+                };
+
+                const cleanupAndResolve = (value) => {
+                    DOM.sendResetEmailBtn.removeEventListener('click', handleSend);
+                    DOM.cancelResetBtn.removeEventListener('click', handleCancel);
+                    DOM.forgotPasswordModal.classList.add('hidden');
+                    resolve(value);
+                };
+
+                DOM.sendResetEmailBtn.addEventListener('click', handleSend, { once: true });
+                DOM.cancelResetBtn.addEventListener('click', handleCancel, { once: true });
+            });
+        };
+
+        const handleForgotPassword = async (e) => {
+            e.preventDefault();
+            const email = await showForgotPasswordModal();
+            
+            if (!email) {
+                return; // Usuário cancelou
+            }
+            
+            try {
+                await sendPasswordResetEmail(auth, email);
+                showInfoModal("Se uma conta existir para este e-mail, um link para redefinição de senha foi enviado.");
+            } catch (error) {
+                // Por segurança, exibe a mesma mensagem mesmo em caso de erro (ex: usuário não encontrado).
+                console.error("Erro na tentativa de redefinição de senha (silenciado para o usuário):", error.code);
+                showInfoModal("Se uma conta existir para este e-mail, um link para redefinição de senha foi enviado.");
+            }
+        };
+
+        const handleRequestDeletion = async () => {
+            const confirmed = await showConfirmModal(
+                "Isto registrará uma solicitação de exclusão de conta. Para formalizar o pedido, você precisará enviar um e-mail ao administrador. Deseja continuar?",
+                "Sim, continuar",
+                "Cancelar"
+            );
+
+            if (confirmed) {
+                const adminEmail = "saianolucrobr@gmail.com";
+                const userEmail = auth.currentUser ? auth.currentUser.email : "[seu e-mail]";
+                showInfoModal(`Para concluir, por favor, envie um e-mail de ${userEmail} para ${adminEmail} solicitando a remoção da sua conta. O administrador processará seu pedido.`);
+            }
         };
         
         const handleLogin = async (e) => {
@@ -563,7 +647,7 @@
                 await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
                 let errorMessage = "E-mail ou senha incorretos."; 
-                if (!isProduction) { // This block will not run in production
+                if (!isProduction) {
                     switch (error.code) {
                         case 'auth/user-not-found':
                             errorMessage = "Erro de Diagnóstico (Testes): Usuário não encontrado.";
@@ -2074,8 +2158,10 @@
         // --- Event Listeners ---
         window.addEventListener('load', initializeFirebase);
         DOM.loginForm.addEventListener('submit', handleLogin);
+        DOM.forgotPasswordBtn.addEventListener('click', handleForgotPassword);
         DOM.infoModalCloseBtn.addEventListener('click', () => DOM.infoModal.classList.add('hidden'));
         DOM.logoutBtn.addEventListener('click', handleLogout);
+        DOM.requestDeletionBtn.addEventListener('click', handleRequestDeletion);
         DOM.backupBtn.addEventListener('click', handleBackup);
         DOM.restoreFileInput.addEventListener('change', handleRestore);
         DOM.addOrderBtn.addEventListener('click', () => {
@@ -2256,6 +2342,8 @@
             if (event.key === 'Escape') {
                 if (!DOM.confirmModal.classList.contains('hidden')) {
                     DOM.confirmCancelBtn.click();
+                } else if (!DOM.forgotPasswordModal.classList.contains('hidden')) {
+                    DOM.cancelResetBtn.click();
                 } else if (!DOM.viewModal.classList.contains('hidden')) {
                     document.getElementById('closeViewBtn')?.click();
                 } else if (!DOM.orderModal.classList.contains('hidden')) {
