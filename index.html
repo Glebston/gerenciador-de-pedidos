@@ -59,7 +59,7 @@
             <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <div class="flex items-center">
                     <img src="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png" alt="Logo" class="h-8 w-auto mr-3">
-                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos</h1>
+                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos1</h1>
                 </div>
                 <div class="flex items-center gap-4">
                      <button id="priceTableBtn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center" title="Tabela de Preços">
@@ -242,7 +242,7 @@
                 <fieldset class="border p-4 rounded-lg">
                     <legend class="text-lg font-semibold px-2">5. Financeiro</legend>
                     <div id="financialsContainer" class="space-y-4 mb-4"></div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 border-t pt-4 items-end">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 border-t pt-4 items-end">
                         <div>
                             <label for="downPayment" class="text-xs font-semibold text-gray-600">Adiantamento (R$)</label>
                             <div class="flex items-center relative">
@@ -254,11 +254,18 @@
                             <label for="paymentMethod" class="text-xs font-semibold text-gray-600">Forma de Pagamento</label>
                             <input type="text" id="paymentMethod" class="p-2 border rounded-md w-full">
                         </div>
-                        <div class="bg-gray-100 p-3 rounded-lg text-center">
+                        <div>
+                            <label for="discount" class="text-xs font-semibold text-gray-600">Desconto (R$)</label>
+                            <div class="flex items-center relative">
+                                <span class="text-gray-500 absolute left-3">R$</span>
+                                <input type="number" step="0.01" id="discount" class="p-2 border rounded-md w-full pl-10">
+                            </div>
+                        </div>
+                        <div class="bg-gray-100 p-3 rounded-lg text-center md:col-span-1">
                             <p class="text-sm text-gray-600">Total do Pedido</p>
                             <p id="grandTotal" class="text-2xl font-bold text-blue-600">R$ 0,00</p>
                         </div>
-                        <div class="bg-red-100 p-3 rounded-lg text-center">
+                        <div class="bg-red-100 p-3 rounded-lg text-center md:col-span-1">
                             <p class="text-sm text-red-700">Resta Pagar</p>
                             <p id="remainingTotal" class="text-2xl font-bold text-red-600">R$ 0,00</p>
                         </div>
@@ -554,6 +561,7 @@
             grandTotal: document.getElementById('grandTotal'),
             remainingTotal: document.getElementById('remainingTotal'),
             downPayment: document.getElementById('downPayment'),
+            discount: document.getElementById('discount'),
             idleModal: document.getElementById('idleModal'),
             stayLoggedInBtn: document.getElementById('stayLoggedInBtn'),
             countdownTimer: document.getElementById('countdownTimer'),
@@ -657,7 +665,7 @@
             const email = await showForgotPasswordModal();
             
             if (!email) {
-                return; // User cancelled
+                return;
             }
             
             try {
@@ -1066,6 +1074,8 @@
                  const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
                  totalValue += standardSub + specificSub;
             });
+            totalValue -= (order.discount || 0);
+
             const countdown = getDeliveryCountdown(order.deliveryDate);
             const countdownColorClasses = {
                 red: 'bg-red-100 text-red-800',
@@ -1228,15 +1238,19 @@
         };
 
         const updateFinancials = () => {
-            let grandTotal = 0;
+            let subtotal = 0;
             DOM.financialsContainer.querySelectorAll('.financial-item').forEach(item => {
                 const quantity = parseFloat(item.querySelector('.financial-quantity').value) || 0;
                 const price = parseFloat(item.querySelector('.financial-price').value) || 0;
-                const subtotal = quantity * price;
-                item.querySelector('.financial-subtotal').textContent = `R$ ${subtotal.toFixed(2)}`;
-                grandTotal += subtotal;
+                const itemSubtotal = quantity * price;
+                item.querySelector('.financial-subtotal').textContent = `R$ ${itemSubtotal.toFixed(2)}`;
+                subtotal += itemSubtotal;
             });
+
+            const discount = parseFloat(DOM.discount.value) || 0;
+            const grandTotal = Math.max(0, subtotal - discount);
             const downPayment = parseFloat(DOM.downPayment.value) || 0;
+
             DOM.grandTotal.textContent = `R$ ${grandTotal.toFixed(2)}`;
             DOM.remainingTotal.textContent = `R$ ${(grandTotal - downPayment).toFixed(2)}`;
         };
@@ -1442,6 +1456,7 @@
                 generalObservation: document.getElementById('generalObservation').value,
                 parts: [],
                 downPayment: parseFloat(DOM.downPayment.value) || 0,
+                discount: parseFloat(DOM.discount.value) || 0,
                 paymentMethod: document.getElementById('paymentMethod').value,
                 mockupUrls: Array.from(document.getElementById('existingFilesContainer').querySelectorAll('a')).map(a => a.href)
             };
@@ -1556,7 +1571,8 @@
             document.getElementById('orderDate').value = orderData.orderDate;
             document.getElementById('deliveryDate').value = orderData.deliveryDate;
             document.getElementById('generalObservation').value = orderData.generalObservation;
-            DOM.downPayment.value = orderData.downPayment || 0;
+            DOM.downPayment.value = orderData.downPayment || '';
+            DOM.discount.value = orderData.discount || '';
             document.getElementById('paymentMethod').value = orderData.paymentMethod || '';
 
             const filesContainer = document.getElementById('existingFilesContainer');
@@ -1614,6 +1630,8 @@
             document.getElementById('orderStatus').value = 'Pendente';
             document.getElementById('orderDate').value = new Date().toISOString().split('T')[0];
             document.getElementById('deliveryDate').value = '';
+            document.getElementById('discount').value = '';
+            updateFinancials();
         };
 
         const showConfirmModal = (message, okText = "OK", cancelText = "Cancelar") => {
@@ -1677,7 +1695,7 @@
             const order = allOrders.find(o => o.id === orderId);
             if (!order) return;
 
-            let totalValue = 0;
+            let subTotal = 0;
             let partsHtml = (order.parts || []).map(p => {
                 const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
                 const specificQty = (p.specifics || []).length;
@@ -1687,8 +1705,8 @@
                 const specificSub = specificQty * (p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0);
                 const detailedSub = detailedQty * (p.unitPrice || 0);
 
-                const subtotal = standardSub + specificSub + detailedSub;
-                totalValue += subtotal;
+                const partSubtotal = standardSub + specificSub + detailedSub;
+                subTotal += partSubtotal;
 
                 let itemsDetailHtml = '';
                 
@@ -1731,9 +1749,13 @@
                         <td class="py-1 px-2 border">${p.colorMain}</td>
                         <td class="py-1 px-2 border text-center">${standardQty + specificQty + detailedQty}</td>
                         <td class="py-1 px-2 border text-right">${unitPriceHtml}</td>
-                        <td class="py-1 px-2 border text-right font-semibold">R$ ${subtotal.toFixed(2)}</td>
+                        <td class="py-1 px-2 border text-right font-semibold">R$ ${partSubtotal.toFixed(2)}</td>
                     </tr>`;
             }).join('');
+
+            const discount = order.discount || 0;
+            const grandTotal = subTotal - discount;
+            const remaining = grandTotal - (order.downPayment || 0);
 
             const modalContent = `
                 <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
@@ -1753,11 +1775,15 @@
                         <h3 class="font-bold text-lg mt-4">Observação Geral</h3>
                         <p class="text-sm p-2 border rounded-md mt-2 min-h-[40px]">${order.generalObservation || 'Nenhuma.'}</p>
                         <h3 class="font-bold text-lg mt-4">Financeiro</h3>
-                        <div class="grid grid-cols-2 gap-x-8 mt-2 border-t pt-4">
-                            <div><strong>Valor Total:</strong> <span class="font-bold text-xl">R$ ${totalValue.toFixed(2)}</span></div>
+                        <div class="grid grid-cols-2 gap-x-8 mt-2 border-t pt-4 text-sm">
+                            <div><strong>Valor Bruto:</strong> R$ ${subTotal.toFixed(2)}</div>
                             <div><strong>Adiantamento:</strong> R$ ${(order.downPayment || 0).toFixed(2)}</div>
+                            <div><strong>Desconto:</strong> R$ ${discount.toFixed(2)}</div>
                             <div><strong>Forma de Pagamento:</strong> ${order.paymentMethod || 'N/A'}</div>
-                            <div class="font-bold text-red-600 text-xl"><strong>Resta Pagar:</strong> R$ ${(totalValue - (order.downPayment || 0)).toFixed(2)}</div>
+                            <div class="mt-2 col-span-2 grid grid-cols-2 gap-x-8">
+                                <div class="font-bold text-blue-600 text-lg"><strong>Valor Final:</strong> R$ ${grandTotal.toFixed(2)}</div>
+                                <div class="font-bold text-red-600 text-lg"><strong>Resta Pagar:</strong> R$ ${remaining.toFixed(2)}</div>
+                            </div>
                         </div>
                         
                         <div id="mockupContainerView" class="pt-4 border-t mt-4">
@@ -1817,6 +1843,8 @@
                  const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
                  totalValue += standardSub + specificSub;
             });
+            totalValue -= (orderData.discount || 0);
+
 
             const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
             
@@ -2262,6 +2290,7 @@
         DOM.addPartBtn.addEventListener('click', () => addPart());
         DOM.orderForm.addEventListener('submit', saveOrder);
         DOM.downPayment.addEventListener('input', updateFinancials);
+        DOM.discount.addEventListener('input', updateFinancials);
 
         DOM.ordersList.addEventListener('click', (e) => {
             const btn = e.target.closest('button');
