@@ -9,7 +9,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .modal-enter, .toast-enter { animation: fadeIn 0.3s ease-out; }
@@ -33,7 +36,6 @@
         .status-Entregue { @apply bg-gray-200 text-gray-800; }
         .kanban-board { display: flex; overflow-x: auto; padding-bottom: 1rem; gap: 1.5rem; }
         .kanban-column { flex: 0 0 340px; max-width: 340px; }
-        .html2pdf__page-break { page-break-before: always; }
     </style>
 </head>
 <body class="antialiased text-gray-800 bg-slate-50">
@@ -59,14 +61,14 @@
             <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <div class="flex items-center">
                     <img src="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png" alt="Logo" class="h-8 w-auto mr-3">
-                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos</h1>
+                    <h1 class="text-xl font-bold text-gray-900">Gerenciador de Pedidos1</h1>
                 </div>
                 <div class="flex items-center gap-4">
-                     <button id="priceTableBtn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center" title="Tabela de Preços">
-                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                           <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a1 1 0 011-1h5a1 1 0 01.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
-                         </svg>
-                     </button>
+                    <button id="priceTableBtn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-3 rounded-lg shadow-md hover:bg-gray-300 transition duration-300 flex items-center justify-center" title="Tabela de Preços">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a1 1 0 011-1h5a1 1 0 01.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
                     <button id="addOrderBtn" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-300 flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                         Novo Pedido
@@ -507,16 +509,15 @@
         const IMGBB_API_KEY = "f012978df48f3596b193c06e05589442";
         
         // CONFIGURAÇÃO PARA AMBIENTE DE PRODUÇÃO
-        const firebaseConfig = { 
-          apiKey: "AIzaSyA8MxD_m6lKrrQKijlxQ0lQUQdC3OpTEv4", 
-          authDomain: "saas-57e0d.firebaseapp.com", 
-          projectId: "saas-57e0d", 
-          storageBucket: "saas-57e0d.appspot.com", 
-          messagingSenderId: "230026949437", 
-          appId: "1:230026949437:web:9f19f286aefb96e0330b54" 
+        const firebaseConfig = {  
+          apiKey: "AIzaSyA8MxD_m6lKrrQKijlxQ0lQUQdC3OpTEv4",  
+          authDomain: "saas-57e0d.firebaseapp.com",  
+          projectId: "saas-57e0d",  
+          storageBucket: "saas-57e0d.appspot.com",  
+          messagingSenderId: "230026949437",  
+          appId: "1:230026949437:web:9f19f286aefb96e0330b54"  
         };
         
-        const isProduction = firebaseConfig.projectId === 'saas-57e0d';
         const CHECK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
 
         let app, db, auth, userId = null, dbCollection, transactionsCollection, pricingCollection, companyRef;
@@ -698,25 +699,7 @@
             try {
                 await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
-                let errorMessage = "E-mail ou senha incorretos."; 
-                if (!isProduction) {
-                    switch (error.code) {
-                        case 'auth/user-not-found':
-                            errorMessage = "Erro de Diagnóstico (Testes): Usuário não encontrado.";
-                            break;
-                        case 'auth/wrong-password':
-                        case 'auth/invalid-credential':
-                            errorMessage = "Erro de Diagnóstico (Testes): Senha inválida para este e-mail.";
-                            break;
-                        case 'auth/user-disabled':
-                            errorMessage = "Erro de Diagnóstico (Testes): Esta conta de usuário foi desativada.";
-                            break;
-                        default:
-                            errorMessage = `Erro de Diagnóstico (Testes): ${error.code}`;
-                            break;
-                    }
-                }
-                showInfoModal(errorMessage);
+                showInfoModal("E-mail ou senha incorretos.");
             }
         };
 
@@ -1068,11 +1051,11 @@
         const generateOrderCardHTML = (order, viewType) => {
             let totalValue = 0;
             (order.parts || []).forEach(p => {
-                 const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
-                 const specificQty = (p.specifics || []).length;
-                 const standardSub = standardQty * (p.unitPriceStandard || p.unitPrice || 0);
-                 const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
-                 totalValue += standardSub + specificSub;
+                const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+                const specificQty = (p.specifics || []).length;
+                const standardSub = standardQty * (p.unitPriceStandard || p.unitPrice || 0);
+                const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
+                totalValue += standardSub + specificSub;
             });
             totalValue -= (order.discount || 0);
 
@@ -1091,10 +1074,10 @@
             const buttonsHtml = viewType === 'pending' 
                 ? `<button data-id="${order.id}" class="edit-btn p-2 rounded-md text-gray-500 hover:bg-yellow-100 hover:text-yellow-700 transition-colors" title="Editar">
                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
-                 </button>` 
+                </button>` 
                 : `<button data-id="${order.id}" class="replicate-btn p-2 rounded-md text-gray-500 hover:bg-green-100 hover:text-green-700 transition-colors" title="Replicar">
                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" /><path d="M5 3a2 2 0 00-2 2v6a1 1 0 102 0V5h6a1 1 0 100-2H5z" /></svg>
-                 </button>`;
+                </button>`;
 
             return `
                 <div class="bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col space-y-3 transform hover:-translate-y-1">
@@ -1792,13 +1775,6 @@
                                 ${(order.mockupUrls || []).map(url => `<a href="${url}" target="_blank"><img src="${url}" class="w-32 h-32 object-cover border rounded-md mockup-image"></a>`).join('') || 'Nenhum arquivo.'}
                             </div>
                         </div>
-
-                        <div id="mockupContainerPdf" class="hidden">
-                            <h3 class="font-bold text-lg mt-4">Arquivos</h3>
-                            <div class="flex flex-wrap gap-4 mt-2">
-                                ${(order.mockupUrls || []).map(url => `<img src="${url}" class="w-full h-auto object-contain border rounded-md mockup-image mt-4">`).join('') || ''}
-                            </div>
-                        </div>
                     </div>
                     <div class="p-4 bg-gray-100 border-t flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
                         <button id="comprehensivePdfBtn" data-name="${order.clientName}" data-id="${order.id}" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg">Gerar PDF do pedido</button>
@@ -1810,38 +1786,234 @@
         };
 
         const generateComprehensivePdf = async (orderId, clientName) => {
+            showInfoModal("Iniciando geração do PDF...");
             const order = allOrders.find(o => o.id === orderId);
-            if (!order) return;
+            if (!order) {
+                showInfoModal("Erro: Pedido não encontrado.");
+                return;
+            }
 
-            const element = document.getElementById('printable-details');
-            const mockupContainer = document.getElementById('mockupContainerPdf');
-            
-            element.classList.remove('p-8', 'pb-8');
+            try {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('p', 'mm', 'a4');
+                const A4_WIDTH = 210;
+                const MARGIN = 15;
+                const contentWidth = A4_WIDTH - MARGIN * 2;
+                let yPosition = MARGIN;
 
-            mockupContainer.classList.remove('hidden');
+                // --- CABEÇALHO ---
+                doc.setFontSize(16);
+                doc.setFont('helvetica', 'bold');
+                doc.text(userCompanyName || 'Relatório de Pedido', A4_WIDTH / 2, yPosition, { align: 'center' });
+                yPosition += 10;
 
-            const options = {
-                margin: 10,
-                filename: `Pedido_${clientName.replace(/\s/g, '_')}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
+                // --- DADOS DO CLIENTE ---
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text(`Pedido - ${order.clientName}`, MARGIN, yPosition);
+                yPosition += 8;
 
-            html2pdf().from(element).set(options).save().finally(() => {
-                mockupContainer.classList.add('hidden');
-                element.classList.add('p-8', 'pb-8');
-            });
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                const clientInfo = [
+                    [`Telefone:`, `${order.clientPhone || 'N/A'}`],
+                    [`Data do Pedido:`, `${order.orderDate ? new Date(order.orderDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`],
+                    [`Status:`, `${order.orderStatus}`],
+                    [`Data de Entrega:`, `${order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`]
+                ];
+                doc.autoTable({
+                    body: clientInfo,
+                    startY: yPosition,
+                    theme: 'plain',
+                    styles: { fontSize: 10, cellPadding: 1 },
+                    columnStyles: { 0: { fontStyle: 'bold' } },
+                    didDrawPage: (data) => { yPosition = data.cursor.y; }
+                });
+                yPosition = doc.autoTable.previous.finalY + 5;
+
+                // --- TABELA DE PEÇAS ---
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Peças do Pedido', MARGIN, yPosition);
+                yPosition += 6;
+
+                const tableHead = [['Peça / Detalhes', 'Material', 'Cor', 'Qtd', 'V. Un.', 'Subtotal']];
+                const tableBody = [];
+                let subTotal = 0;
+
+                (order.parts || []).forEach(p => {
+                    // Lógica para calcular totais e formatação
+                    const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+                    const specificQty = (p.specifics || []).length;
+                    const detailedQty = (p.details || []).length;
+                    const totalQty = standardQty + specificQty + detailedQty;
+
+                    const standardSub = standardQty * (p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0);
+                    const specificSub = specificQty * (p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0);
+                    const detailedSub = detailedQty * (p.unitPrice || 0);
+                    const partSubtotal = standardSub + specificSub + detailedSub;
+                    subTotal += partSubtotal;
+
+                    // Formatação dos detalhes para a célula da tabela
+                    let detailsText = '';
+                    if (p.partInputType === 'comum') {
+                         if (p.sizes && Object.keys(p.sizes).length > 0) {
+                            detailsText += Object.entries(p.sizes).map(([cat, sizes]) =>
+                                `${cat}: ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
+                            ).join('\n');
+                        }
+                        if (p.specifics && p.specifics.length > 0) {
+                            detailsText += (detailsText ? '\n' : '') + 'Específicos:\n' + p.specifics.map(s => 
+                                `- L:${s.width||'N/A'}, A:${s.height||'N/A'} (${s.observation||'Sem obs.'})`
+                            ).join('\n');
+                        }
+                    } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
+                        detailsText = p.details.map(d => `${d.name||''} - ${d.size||''} - ${d.number||''}`).join('\n');
+                    }
+                    
+                    let unitPriceText = '';
+                     if(p.partInputType === 'comum') {
+                        if(standardQty > 0) unitPriceText += `R$ ${(p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0).toFixed(2)} (Padrão)\n`;
+                        if(specificQty > 0) unitPriceText += `R$ ${(p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0).toFixed(2)} (Específico)`;
+                     } else {
+                         unitPriceText = `R$ ${(p.unitPrice || 0).toFixed(2)}`;
+                     }
+
+                    tableBody.push([
+                        { content: `${p.type}\n${detailsText}`, styles: { fontSize: 8 } },
+                        p.material,
+                        p.colorMain,
+                        totalQty,
+                        { content: unitPriceText.trim(), styles: { halign: 'right' } },
+                        { content: `R$ ${partSubtotal.toFixed(2)}`, styles: { halign: 'right' } }
+                    ]);
+                });
+
+                doc.autoTable({
+                    head: tableHead,
+                    body: tableBody,
+                    startY: yPosition,
+                    theme: 'grid',
+                    headStyles: { fillColor: [230, 230, 230], textColor: 20, fontStyle: 'bold' },
+                    columnStyles: {
+                        0: { cellWidth: 60 },
+                        3: { halign: 'center' },
+                        4: { halign: 'right' },
+                        5: { halign: 'right' }
+                    },
+                    didDrawPage: (data) => { yPosition = data.cursor.y; }
+                });
+                yPosition = doc.autoTable.previous.finalY + 8;
+
+                // --- OBSERVAÇÃO E FINANCEIRO ---
+                doc.setFontSize(12);
+                doc.setFont('helvetica', 'bold');
+                doc.text('Observação Geral', MARGIN, yPosition);
+                yPosition += 5;
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'normal');
+                const obsLines = doc.splitTextToSize(order.generalObservation || 'Nenhuma.', contentWidth);
+                doc.text(obsLines, MARGIN, yPosition);
+                yPosition += (obsLines.length * 4) + 8;
+
+                const discount = order.discount || 0;
+                const grandTotal = subTotal - discount;
+                const remaining = grandTotal - (order.downPayment || 0);
+
+                const financialDetails = [
+                    ['Valor Bruto:', `R$ ${subTotal.toFixed(2)}`],
+                    ['Desconto:', `R$ ${discount.toFixed(2)}`],
+                    ['Adiantamento:', `R$ ${(order.downPayment || 0).toFixed(2)}`],
+                    ['Forma de Pgto:', `${order.paymentMethod || 'N/A'}`],
+                    ['VALOR TOTAL:', `R$ ${grandTotal.toFixed(2)}`],
+                    ['RESTA PAGAR:', `R$ ${remaining.toFixed(2)}`]
+                ];
+
+                doc.autoTable({
+                    body: financialDetails,
+                    startY: yPosition,
+                    theme: 'plain',
+                    styles: { fontSize: 10, cellPadding: 1.5 },
+                    columnStyles: { 0: { fontStyle: 'bold' } },
+                    didParseCell: (data) => {
+                        if (data.row.index >= 4) {
+                            data.cell.styles.fontStyle = 'bold';
+                            data.cell.styles.fontSize = 12;
+                        }
+                    },
+                    didDrawPage: (data) => { yPosition = data.cursor.y; }
+                });
+                yPosition = doc.autoTable.previous.finalY;
+
+                // --- IMAGENS ---
+                if (order.mockupUrls && order.mockupUrls.length > 0) {
+                    yPosition += 10;
+                    if (yPosition > 250) { // Check if we need a new page before starting images
+                        doc.addPage();
+                        yPosition = MARGIN;
+                    }
+                    doc.setFontSize(12);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('Arquivos (Mockups)', MARGIN, yPosition);
+                    yPosition += 8;
+                    
+                    for (const url of order.mockupUrls) {
+                        try {
+                            const imgData = await new Promise((resolve, reject) => {
+                                const img = new Image();
+                                img.crossOrigin = 'Anonymous';
+                                img.onload = () => {
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = img.width;
+                                    canvas.height = img.height;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0);
+                                    resolve(canvas.toDataURL('image/jpeg', 0.9));
+                                };
+                                img.onerror = (err) => reject(new Error(`Falha ao carregar imagem: ${url}`));
+                                img.src = url;
+                            });
+
+                            const imgProps = doc.getImageProperties(imgData);
+                            const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+                            
+                            if (yPosition + imgHeight > 280) { // 297 (A4) - MARGIN
+                                doc.addPage();
+                                yPosition = MARGIN;
+                            }
+                            
+                            doc.addImage(imgData, 'JPEG', MARGIN, yPosition, contentWidth, imgHeight);
+                            yPosition += imgHeight + 5;
+
+                        } catch (imgError) {
+                            console.error(imgError);
+                            if (yPosition > 280) { doc.addPage(); yPosition = MARGIN; }
+                            doc.setFontSize(9);
+                            doc.setTextColor(150);
+                            doc.text(`- Não foi possível carregar a imagem: ${url}`, MARGIN, yPosition);
+                            yPosition += 5;
+                            doc.setTextColor(0);
+                        }
+                    }
+                }
+                
+                doc.save(`Pedido_${clientName.replace(/\s/g, '_')}.pdf`);
+                showInfoModal("PDF gerado com sucesso!");
+
+            } catch (error) {
+                console.error("Erro ao gerar PDF programático:", error);
+                showInfoModal("Ocorreu um erro inesperado ao gerar o PDF.");
+            }
         };
         
         const generateReceiptPdf = async (orderData) => {
             let totalValue = 0;
             (orderData.parts || []).forEach(p => {
-                 const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
-                 const specificQty = (p.specifics || []).length;
-                 const standardSub = standardQty * (p.unitPriceStandard || p.unitPrice || 0);
-                 const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
-                 totalValue += standardSub + specificSub;
+                const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+                const specificQty = (p.specifics || []).length;
+                const standardSub = standardQty * (p.unitPriceStandard || p.unitPrice || 0);
+                const specificSub = specificQty * (p.unitPriceSpecific || p.unitPrice || 0);
+                totalValue += standardSub + specificSub;
             });
             totalValue -= (orderData.discount || 0);
 
@@ -1869,31 +2041,24 @@
                     </div>
                 </div>
             `;
-
-            const tempContainer = document.createElement('div');
-            tempContainer.style.position = 'absolute';
-            tempContainer.style.left = '-9999px';
-            tempContainer.style.top = '0';
-            tempContainer.style.padding = '20px';
-            tempContainer.style.backgroundColor = 'white';
-            tempContainer.innerHTML = receiptHtml;
-            document.body.appendChild(tempContainer);
             
             try {
-                const { jsPDF } = window;
-                const canvas = await window.html2canvas(tempContainer.firstElementChild, { scale: 2 });
-                const imgData = canvas.toDataURL('image/png');
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const imgProps = pdf.getImageProperties(imgData);
-                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                pdf.addImage(imgData, 'PNG', 5, 5, pdfWidth - 10, pdfHeight - 10);
-                pdf.save(`Recibo_${orderData.clientName.replace(/\s/g, '_')}.pdf`);
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF('p', 'mm', 'a4');
+                
+                await doc.html(receiptHtml, {
+                    callback: function (doc) {
+                        doc.save(`Recibo_${orderData.clientName.replace(/\s/g, '_')}.pdf`);
+                    },
+                    x: 5,
+                    y: 5,
+                    width: 200, 
+                    windowWidth: 700 
+                });
+
             } catch (error) {
                 console.error("Erro ao gerar PDF do Recibo:", error);
                 showInfoModal("Não foi possível gerar o PDF do recibo.");
-            } finally {
-                document.body.removeChild(tempContainer);
             }
         };
         
@@ -2155,15 +2320,15 @@
 
         const markTransactionAsPaid = async (id) => {
              const transactionRef = doc(transactionsCollection, id);
-                 try {
+                try {
                       await updateDoc(transactionRef, {
                            status: 'pago',
                            date: new Date().toISOString().split('T')[0]
                       });
-                 } catch(error) {
-                      console.error("Erro ao marcar como recebido:", error);
-                      showInfoModal("Não foi possível atualizar o lançamento.");
-                 }
+               } catch(error) {
+                     console.error("Erro ao marcar como recebido:", error);
+                     showInfoModal("Não foi possível atualizar o lançamento.");
+               }
         };
         
         const checkBackupReminder = () => {
