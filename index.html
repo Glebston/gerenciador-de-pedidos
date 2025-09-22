@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciador de Pedidos</title>
+    <title>Gerenciador de Pedidos1</title>
     <link rel="icon" href="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -58,6 +58,7 @@
 
     <div id="app" class="hidden">
         <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-40">
+            <div id="test-indicator" class="hidden bg-yellow-400 text-black text-center font-bold p-1 text-sm">AMBIENTE DE TESTES</div>
             <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <div class="flex items-center">
                     <img src="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png" alt="Logo" class="h-8 w-auto mr-3">
@@ -518,6 +519,7 @@
           appId: "1:230026949437:web:9f19f286aefb96e0330b54"  
         };
         
+        const isProduction = firebaseConfig.projectId === 'saas-57e0d';
         const CHECK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
 
         let app, db, auth, userId = null, dbCollection, transactionsCollection, pricingCollection, companyRef;
@@ -686,7 +688,7 @@
             );
 
             if (confirmed) {
-                const adminEmail = "paglucrobr@gmail.com";
+                const adminEmail = "saianolucrobr@gmail.com";
                 const userEmail = auth.currentUser ? auth.currentUser.email : "[seu e-mail]";
                 showInfoModal(`Para concluir, por favor, envie um e-mail de ${userEmail} para ${adminEmail} solicitando a remoção da sua conta. O administrador processará seu pedido.`);
             }
@@ -699,7 +701,25 @@
             try {
                 await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
-                showInfoModal("E-mail ou senha incorretos.");
+                let errorMessage = "E-mail ou senha incorretos."; 
+                if (!isProduction) {
+                    switch (error.code) {
+                        case 'auth/user-not-found':
+                            errorMessage = "Erro de Diagnóstico (Testes): Usuário não encontrado.";
+                            break;
+                        case 'auth/wrong-password':
+                        case 'auth/invalid-credential':
+                            errorMessage = "Erro de Diagnóstico (Testes): Senha inválida para este e-mail.";
+                            break;
+                        case 'auth/user-disabled':
+                            errorMessage = "Erro de Diagnóstico (Testes): Esta conta de usuário foi desativada.";
+                            break;
+                        default:
+                            errorMessage = `Erro de Diagnóstico (Testes): ${error.code}`;
+                            break;
+                    }
+                }
+                showInfoModal(errorMessage);
             }
         };
 
@@ -738,6 +758,7 @@
                 resetIdleTimer();
                 initializeAndPopulateDatalists();
                 checkBackupReminder();
+                triggerAutoBackupIfNeeded(); // <-- NOVA FUNÇÃO CHAMADA AQUI
             } else {
                 showInfoModal("Erro: Usuário não associado a nenhuma empresa. Fale com o suporte.");
                 handleLogout();
@@ -749,6 +770,10 @@
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
+
+                if (!isProduction) {
+                    document.getElementById('test-indicator').classList.remove('hidden');
+                }
 
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
@@ -903,7 +928,7 @@
                 tableBody.innerHTML = `<tr><td colspan="3" class="text-center p-6 text-gray-500">Nenhum item na tabela de preços. Clique em "Editar" para adicionar.</td></tr>`;
             } else {
                  allPricingItems.forEach(item => {
-                    tableBody.appendChild(createPriceTableRow(item, mode));
+                     tableBody.appendChild(createPriceTableRow(item, mode));
                  });
             }
             
@@ -1127,8 +1152,15 @@
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            showInfoModal("Backup completo gerado com sucesso!");
-            localStorage.setItem(`backupTimestamp_${userCompanyId}`, Date.now());
+            
+            localStorage.setItem(`lastAutoBackupTimestamp_${userCompanyId}`, Date.now());
+            // Mostra a mensagem apenas se não for parte do fluxo automático
+            if (!document.getElementById('infoModal').classList.contains('hidden') && DOM.infoModalMessage.textContent.includes('Backup semi-automático')) {
+                // Se o modal de backup automático já estiver visível, não mostra outro
+            } else {
+                showInfoModal("Backup completo gerado com sucesso!");
+            }
+            
         };
 
         const handleRestore = async (event) => {
@@ -1151,9 +1183,9 @@
                         throw new Error("Formato de arquivo de backup inválido.");
                     }
                     
-                    if (!Array.isArray(ordersToRestore) || !Array.isArray(transactionsToRestore)) {
+                     if (!Array.isArray(ordersToRestore) || !Array.isArray(transactionsToRestore)) {
                          throw new Error("Dados de backup corrompidos.");
-                    }
+                     }
 
                     await processRestore(ordersToRestore, transactionsToRestore);
                 } catch (error) {
@@ -1857,7 +1889,7 @@
                     // Formatação dos detalhes para a célula da tabela
                     let detailsText = '';
                     if (p.partInputType === 'comum') {
-                         if (p.sizes && Object.keys(p.sizes).length > 0) {
+                        if (p.sizes && Object.keys(p.sizes).length > 0) {
                             detailsText += Object.entries(p.sizes).map(([cat, sizes]) =>
                                 `${cat}: ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
                             ).join('\n');
@@ -1873,8 +1905,8 @@
                     
                     let unitPriceText = '';
                      if(p.partInputType === 'comum') {
-                        if(standardQty > 0) unitPriceText += `R$ ${(p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0).toFixed(2)} (Padrão)\n`;
-                        if(specificQty > 0) unitPriceText += `R$ ${(p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0).toFixed(2)} (Específico)`;
+                         if(standardQty > 0) unitPriceText += `R$ ${(p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0).toFixed(2)} (Padrão)\n`;
+                         if(specificQty > 0) unitPriceText += `R$ ${(p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0).toFixed(2)} (Específico)`;
                      } else {
                          unitPriceText = `R$ ${(p.unitPrice || 0).toFixed(2)}`;
                      }
@@ -2320,19 +2352,37 @@
 
         const markTransactionAsPaid = async (id) => {
              const transactionRef = doc(transactionsCollection, id);
-                try {
-                      await updateDoc(transactionRef, {
+                 try {
+                       await updateDoc(transactionRef, {
                            status: 'pago',
                            date: new Date().toISOString().split('T')[0]
-                      });
+                       });
                } catch(error) {
-                     console.error("Erro ao marcar como recebido:", error);
-                     showInfoModal("Não foi possível atualizar o lançamento.");
+                       console.error("Erro ao marcar como recebido:", error);
+                       showInfoModal("Não foi possível atualizar o lançamento.");
                }
         };
         
+        const triggerAutoBackupIfNeeded = () => {
+            const storageKey = `lastAutoBackupTimestamp_${userCompanyId}`;
+            const lastBackupTimestamp = localStorage.getItem(storageKey);
+
+            if (!lastBackupTimestamp) {
+                return; // Não faz nada se nunca houve um backup
+            }
+
+            const now = Date.now();
+            const sevenDaysInMillis = 7 * 24 * 60 * 60 * 1000;
+            
+            if ((now - parseInt(lastBackupTimestamp)) > sevenDaysInMillis) {
+                showInfoModal("Backup semi-automático iniciado. Seu último backup foi há mais de 7 dias.");
+                handleBackup();
+            }
+        };
+        
         const checkBackupReminder = () => {
-            const lastBackupTimestamp = localStorage.getItem(`backupTimestamp_${userCompanyId}`);
+            const storageKey = `lastAutoBackupTimestamp_${userCompanyId}`;
+            const lastBackupTimestamp = localStorage.getItem(storageKey);
             if (!lastBackupTimestamp) {
                 return;
             }
