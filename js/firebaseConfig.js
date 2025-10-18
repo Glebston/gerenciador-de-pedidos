@@ -3,14 +3,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebas
 import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-// --- ATENÇÃO: CONFIGURAÇÃO PARA AMBIENTE DE TESTES ---
+// --- ATENÇÃO: CONFIGURAÇÃO PARA AMBIENTE DE PRODUÇÃO ---
 const firebaseConfig = {
-  apiKey: "AIzaSyDZrgh2y3d0fiv5uF_d73Syuo54_39L__8",
-  authDomain: "saas-teste-c8d7a.firebaseapp.com",
-  projectId: "saas-teste-c8d7a",
-  storageBucket: "saas-teste-c8d7a.appspot.com",
-  messagingSenderId: "281601947474",
-  appId: "1:281601947474:web:1e580dbb06b685bf5d2c8b"
+  apiKey: "AIzaSyA8MxD_m6lKrrQKijlxQ0lQUQdC3OpTEv4",
+  authDomain: "saas-57e0d.firebaseapp.com",
+  projectId: "saas-57e0d",
+  storageBucket: "saas-57e0d.appspot.com",
+  messagingSenderId: "230026949437",
+  appId: "1:230026949437:web:9f19f286aefb96e0330b54"
 };
 
 // Inicializa o Firebase
@@ -21,3 +21,4 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 export { db, auth };
+
