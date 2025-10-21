@@ -13,25 +13,49 @@ let unsubscribeListener = null; // Função para desligar o listener do Firestor
 
 /**
  * Configura o listener em tempo real para a coleção de pedidos.
- * Qualquer alteração no Firestore será refletida aqui.
- * @param {function} renderCallback - A função (do ui.js) que será chamada para redesenhar a lista de pedidos.
+ * @param {function} granularUpdateCallback - A função (do main.js) que será chamada para cada mudança granular.
  * @param {function} getViewCallback - Função que retorna a visualização atual ('pending' ou 'delivered').
  */
-const setupFirestoreListener = (renderCallback, getViewCallback) => {
+const setupFirestoreListener = (granularUpdateCallback, getViewCallback) => {
     if (unsubscribeListener) unsubscribeListener(); // Garante que não haja listeners duplicados
 
     const q = query(dbCollection);
     unsubscribeListener = onSnapshot(q, (snapshot) => {
-        allOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        // O serviço obtém os dados e invoca o callback para que a UI seja atualizada
-        if (renderCallback) {
-            const currentView = getViewCallback ? getViewCallback() : 'pending';
-            renderCallback(allOrders, currentView);
-        }
+        snapshot.docChanges().forEach((change) => {
+            // --- CORREÇÃO v4.2: A verificação 'hasPendingWrites' foi REMOVIDA daqui ---
+            // Isso garante que o listener processe *todas* as mudanças,
+            // incluindo as iniciadas pelo próprio cliente (como "Quitar e Entregar").
+
+            const data = { id: change.doc.id, ...change.doc.data() };
+            const index = allOrders.findIndex(o => o.id === data.id);
+
+            // Gerencia o cache local
+            if (change.type === 'added') {
+                if (index === -1) { // Garante que não exista
+                    allOrders.push(data);
+                }
+            } else if (change.type === 'modified') {
+                if (index > -1) {
+                    allOrders[index] = data; // Atualiza o item no cache
+                } else {
+                    // Se não existia (raro, mas pode acontecer em 'modified'), adiciona
+                    allOrders.push(data);
+                }
+            } else if (change.type === 'removed') {
+                if (index > -1) {
+                    allOrders.splice(index, 1); // Remove do cache
+                }
+            }
+            
+            // Invoca o callback granular para que a UI seja atualizada
+            if (granularUpdateCallback) {
+                granularUpdateCallback(change.type, data, getViewCallback());
+            }
+        });
+
     }, (error) => {
         console.error("Erro ao buscar pedidos em tempo real:", error);
-        // Em um cenário real, poderíamos chamar um showInfoModal de erro aqui
     });
 };
 
@@ -41,12 +65,12 @@ const setupFirestoreListener = (renderCallback, getViewCallback) => {
 /**
  * Inicializa o serviço de pedidos para uma empresa específica.
  * @param {string} companyId - O ID da empresa do usuário logado.
- * @param {function} renderCallback - A função de renderização da UI para os pedidos.
+ * @param {function} granularUpdateCallback - A função de callback granular (em main.js).
  * @param {function} getViewCallback - Função que retorna a visualização atual.
  */
-export const initializeOrderService = (companyId, renderCallback, getViewCallback) => {
+export const initializeOrderService = (companyId, granularUpdateCallback, getViewCallback) => {
     dbCollection = collection(db, `companies/${companyId}/orders`);
-    setupFirestoreListener(renderCallback, getViewCallback);
+    setupFirestoreListener(granularUpdateCallback, getViewCallback);
 };
 
 /**
@@ -90,7 +114,7 @@ export const getOrderById = (id) => {
  * @returns {Array}
  */
 export const getAllOrders = () => {
-    return allOrders;
+    return [...allOrders]; // Retorna cópia
 };
 
 /**
