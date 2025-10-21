@@ -14,20 +14,50 @@ let unsubscribeListener = null;    // Função para desligar o listener do Fires
 
 /**
  * Configura o listener em tempo real para a coleção de transações.
- * @param {function} renderCallback - A função (do ui.js) que será chamada para redesenhar o dashboard financeiro.
+ * @param {function} granularUpdateCallback - A função (do main.js) que será chamada para cada mudança granular.
  * @param {function} getBankBalanceConfig - Uma função que retorna o objeto de configuração de saldo atual.
  */
-const setupTransactionsListener = (renderCallback, getBankBalanceConfig) => {
+const setupTransactionsListener = (granularUpdateCallback, getBankBalanceConfig) => {
     if (unsubscribeListener) unsubscribeListener();
 
     const q = query(transactionsCollection);
     unsubscribeListener = onSnapshot(q, (snapshot) => {
-        allTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
         
-        if (renderCallback) {
-            renderCallback(allTransactions, getBankBalanceConfig());
-        }
+        snapshot.docChanges().forEach((change) => {
+            // --- CORREÇÃO v4.2: A verificação 'hasPendingWrites' foi REMOVIDA daqui ---
+            // Isso garante que a lista de transações se atualize
+            // imediatamente após o usuário salvar um novo lançamento.
+
+            const data = { id: change.doc.id, ...change.doc.data() };
+            const index = allTransactions.findIndex(t => t.id === data.id);
+
+            // Gerencia o cache local
+            if (change.type === 'added') {
+                if (index === -1) {
+                    allTransactions.push(data);
+                }
+            } else if (change.type === 'modified') {
+                if (index > -1) {
+                    allTransactions[index] = data; // Atualiza o item no cache
+                } else {
+                    allTransactions.push(data); // Adiciona se não existia
+                }
+            } else if (change.type === 'removed') {
+                if (index > -1) {
+                    allTransactions.splice(index, 1); // Remove do cache
+                }
+            }
+            
+            // Invoca o callback granular
+            // Também recalcula o dashboard, pois os KPIs (indicadores principais) precisam ser atualizados
+            if (granularUpdateCallback) {
+                granularUpdateCallback(change.type, data, getBankBalanceConfig());
+            }
+        });
+        
+        // Ordena o cache local após as mudanças
+        allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
     }, (error) => {
         console.error("Erro ao carregar transações:", error);
     });
@@ -39,13 +69,13 @@ const setupTransactionsListener = (renderCallback, getBankBalanceConfig) => {
 /**
  * Inicializa o serviço financeiro para uma empresa específica.
  * @param {string} companyId - O ID da empresa do usuário logado.
- * @param {function} renderCallback - A função de renderização da UI para o dashboard financeiro.
+ * @param {function} granularUpdateCallback - A função de callback granular (em main.js).
  * @param {function} getBankBalanceConfig - Função que retorna o objeto de configuração de saldo.
  */
-export const initializeFinanceService = (companyId, renderCallback, getBankBalanceConfig) => {
+export const initializeFinanceService = (companyId, granularUpdateCallback, getBankBalanceConfig) => {
     transactionsCollection = collection(db, `companies/${companyId}/transactions`);
     companyRef = doc(db, "companies", companyId);
-    setupTransactionsListener(renderCallback, getBankBalanceConfig);
+    setupTransactionsListener(granularUpdateCallback, getBankBalanceConfig);
 };
 
 /**
