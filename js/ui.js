@@ -199,7 +199,10 @@ export const handleCookieConsent = () => {
     }
 };
 
-// Funções de Renderização de Pedidos
+// ==========================================================
+// SEÇÃO DE RENDERIZAÇÃO DE PEDIDOS (KANBAN E ENTREGUES)
+// ==========================================================
+
 const getDeliveryCountdown = (deliveryDate) => {
     if (!deliveryDate) return { text: 'Sem data', color: 'gray' };
     const today = new Date();
@@ -247,89 +250,260 @@ const generateOrderCardHTML = (order, viewType) => {
         `<button data-id="${order.id}" class="replicate-btn p-2 rounded-md text-gray-500 hover:bg-green-100 hover:text-green-700 transition-colors" title="Replicar">
            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" /><path d="M5 3a2 2 0 00-2 2v6a1 1 0 102 0V5h6a1 1 0 100-2H5z" /></svg>
         </button>`;
+    
+    // Criamos o elemento DOM em vez de string
+    const card = document.createElement('div');
+    card.className = "bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col space-y-3 transform hover:-translate-y-1";
+    card.dataset.id = order.id;
+    card.dataset.deliveryDate = order.deliveryDate || 'Sem Data'; // Para ordenação no Kanban
 
-    return `
-        <div class="bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col space-y-3 transform hover:-translate-y-1">
-            <div class="flex justify-between items-start">
-                <h3 class="text-lg font-bold text-gray-800">${order.clientName}</h3>
-                <span class="status-badge status-${order.orderStatus.replace(/\s/g, '-')}">${order.orderStatus}</span>
-            </div>
-            
-            ${viewType === 'pending' ? `<div class="text-sm font-medium text-gray-500 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <span class="ml-1.5">Entrega: <strong>${formattedDeliveryDate}</strong></span>
-            </div>` : ''}
+    card.innerHTML = `
+        <div class="flex justify-between items-start">
+            <h3 class="text-lg font-bold text-gray-800">${order.clientName}</h3>
+            <span class="status-badge status-${order.orderStatus.replace(/\s/g, '-')}">${order.orderStatus}</span>
+        </div>
+        
+        ${viewType === 'pending' ? `<div class="text-sm font-medium text-gray-500 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+            <span class="ml-1.5">Entrega: <strong>${formattedDeliveryDate}</strong></span>
+        </div>` : ''}
 
-            <p class="text-sm text-gray-600">Total: <span class="font-semibold text-blue-600">R$ ${totalValue.toFixed(2)}</span></p>
+        <p class="text-sm text-gray-600">Total: <span class="font-semibold text-blue-600">R$ ${totalValue.toFixed(2)}</span></p>
 
-            ${viewType === 'pending' ? `<div class="text-sm font-semibold py-1 px-2 rounded-full text-center ${countdownColorClasses[countdown.color]}">${countdown.text}</div>` : ''}
-            
-            <div class="flex space-x-2 items-center pt-3 border-t border-gray-100 mt-auto">
-                <button data-id="${order.id}" class="view-btn flex-1 bg-gray-100 text-gray-700 font-semibold py-2 px-3 rounded-lg text-sm hover:bg-gray-200 transition-colors">Detalhes</button>
-                ${buttonsHtml}
-                ${viewType === 'pending' ? 
-                `<button data-id="${order.id}" class="settle-and-deliver-btn p-2 rounded-md text-gray-500 hover:bg-green-100 hover:text-green-700 transition-colors" title="Quitar e Entregar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
-                </button>` : ''}
-                <button data-id="${order.id}" class="delete-btn p-2 rounded-md text-gray-500 hover:bg-red-100 hover:text-red-700 transition-colors" title="Excluir">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-                </button>
-            </div>
-        </div>`;
+        ${viewType === 'pending' ? `<div class="text-sm font-semibold py-1 px-2 rounded-full text-center ${countdownColorClasses[countdown.color]}">${countdown.text}</div>` : ''}
+        
+        <div class="flex space-x-2 items-center pt-3 border-t border-gray-100 mt-auto">
+            <button data-id="${order.id}" class="view-btn flex-1 bg-gray-100 text-gray-700 font-semibold py-2 px-3 rounded-lg text-sm hover:bg-gray-200 transition-colors">Detalhes</button>
+            ${buttonsHtml}
+            ${viewType === 'pending' ? 
+            `<button data-id="${order.id}" class="settle-and-deliver-btn p-2 rounded-md text-gray-500 hover:bg-green-100 hover:text-green-700 transition-colors" title="Quitar e Entregar">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+            </button>` : ''}
+            <button data-id="${order.id}" class="delete-btn p-2 rounded-md text-gray-500 hover:bg-red-100 hover:text-red-700 transition-colors" title="Excluir">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+            </button>
+        </div>
+    `;
+    return card;
 };
 
+/**
+ * Prepara o container da lista de pedidos (Kanban ou Grid)
+ */
+const setupOrderListContainer = (viewType) => {
+    DOM.ordersList.innerHTML = ''; // Limpa
+    DOM.ordersList.className = ''; // Reseta classes
+    if (viewType === 'pending') {
+        DOM.ordersList.classList.add('kanban-board');
+    } else {
+        DOM.ordersList.classList.add('grid', 'grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-4', '2xl:grid-cols-5', 'gap-6');
+    }
+};
+
+/**
+ * Procura ou cria uma coluna no Kanban
+ * @param {string} dateKey - O 'data-date-key' (ex: '2025-10-31' ou 'Sem Data')
+ * @returns {HTMLElement} O elemento do container de cards da coluna
+ */
+const findOrCreateKanbanColumn = (dateKey) => {
+    let column = DOM.ordersList.querySelector(`.kanban-column[data-date-key="${dateKey}"]`);
+    if (column) {
+        return column.querySelector('.kanban-column-content');
+    }
+
+    // Coluna não existe, vamos criar
+    const formattedDate = dateKey === 'Sem Data' ?
+        'Sem Data de Entrega' :
+        new Date(dateKey + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    
+    column = document.createElement('div');
+    column.className = 'kanban-column';
+    column.dataset.dateKey = dateKey;
+    column.innerHTML = `
+        <h2 class="font-bold text-lg text-gray-700 mb-4 flex items-center">
+            ${formattedDate}
+            <span class="kanban-column-counter ml-2 text-sm font-medium bg-slate-200 text-slate-600 rounded-full px-2 py-0.5">0</span>
+        </h2>
+        <div class="kanban-column-content space-y-4"></div>
+    `;
+
+    // Insere a coluna na ordem correta
+    const allColumns = Array.from(DOM.ordersList.querySelectorAll('.kanban-column'));
+    let inserted = false;
+    if (dateKey !== 'Sem Data') {
+        const newDate = new Date(dateKey + 'T00:00:00');
+        for (const existingCol of allColumns) {
+            const existingDateKey = existingCol.dataset.dateKey;
+            if (existingDateKey !== 'Sem Data' && newDate < new Date(existingDateKey + 'T00:00:00')) {
+                DOM.ordersList.insertBefore(column, existingCol);
+                inserted = true;
+                break;
+            }
+        }
+    }
+    if (!inserted) {
+        // Se for "Sem Data" ou mais recente que todas, adiciona no final
+        DOM.ordersList.appendChild(column);
+    }
+    
+    return column.querySelector('.kanban-column-content');
+};
+
+/**
+ * Atualiza o contador de uma coluna Kanban
+ * @param {HTMLElement} columnContent - O elemento '.kanban-column-content'
+ */
+const updateKanbanColumnCounter = (columnContent) => {
+    const column = columnContent.closest('.kanban-column');
+    if (!column) return;
+    
+    const counter = column.querySelector('.kanban-column-counter');
+    const count = columnContent.children.length;
+    counter.textContent = count;
+    
+    // Se a coluna ficar vazia, remove-a
+    if (count === 0) {
+        column.remove();
+    }
+};
+
+/**
+ * Adiciona um card de pedido à UI
+ */
+export const addOrderCard = (order, viewType) => {
+    const card = generateOrderCardHTML(order, viewType);
+    
+    if (viewType === 'pending') {
+        const dateKey = order.deliveryDate || 'Sem Data';
+        const columnContent = findOrCreateKanbanColumn(dateKey);
+        // Insere o card ordenado por nome dentro da coluna
+        const cardsInColumn = Array.from(columnContent.querySelectorAll('.bg-white'));
+        let inserted = false;
+        for (const existingCard of cardsInColumn) {
+            if (order.clientName.localeCompare(existingCard.querySelector('h3').textContent) < 0) {
+                columnContent.insertBefore(card, existingCard);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) {
+            columnContent.appendChild(card);
+        }
+        updateKanbanColumnCounter(columnContent);
+    } else {
+        // Na 'delivered' view (grid), insere ordenado por data (mais novo primeiro)
+        const allCards = Array.from(DOM.ordersList.querySelectorAll('.bg-white'));
+        let inserted = false;
+        const orderDate = new Date(order.deliveryDate || 0);
+        for (const existingCard of allCards) {
+            const existingDate = new Date(existingCard.dataset.deliveryDate || 0);
+            if (orderDate > existingDate) {
+                DOM.ordersList.insertBefore(card, existingCard);
+                inserted = true;
+                break;
+            }
+        }
+        if (!inserted) {
+            DOM.ordersList.appendChild(card);
+        }
+    }
+    
+    // Remove o "Nenhum pedido" se for o primeiro
+    const placeholder = DOM.ordersList.querySelector('.orders-placeholder');
+    if (placeholder) placeholder.remove();
+};
+
+/**
+ * Atualiza um card de pedido existente na UI
+ */
+export const updateOrderCard = (order, viewType) => {
+    const existingCard = DOM.ordersList.querySelector(`[data-id="${order.id}"]`);
+    if (!existingCard) {
+        // Se não existia (ex: mudou de 'Entregue' para 'Pendente'), apenas adiciona
+        addOrderCard(order, viewType);
+        return;
+    }
+
+    const oldColumnContent = existingCard.closest('.kanban-column-content');
+    const newCard = generateOrderCardHTML(order, viewType);
+
+    // Substitui o card antigo pelo novo
+    existingCard.replaceWith(newCard);
+    
+    if (viewType === 'pending') {
+        const newDateKey = order.deliveryDate || 'Sem Data';
+        const newColumnContent = findOrCreateKanbanColumn(newDateKey);
+        
+        // Se a coluna for diferente, move o card
+        if (newColumnContent !== oldColumnContent) {
+            newColumnContent.appendChild(newCard); // Adiciona na nova coluna
+            if (oldColumnContent) {
+                updateKanbanColumnCounter(oldColumnContent); // Atualiza contador da antiga
+            }
+        }
+        updateKanbanColumnCounter(newColumnContent); // Atualiza contador da nova
+    }
+};
+
+/**
+ * Remove um card de pedido da UI
+ */
+export const removeOrderCard = (orderId) => {
+    const card = DOM.ordersList.querySelector(`[data-id="${orderId}"]`);
+    if (card) {
+        const columnContent = card.closest('.kanban-column-content');
+        card.remove();
+        if (columnContent) {
+            updateKanbanColumnCounter(columnContent); // Atualiza o contador da coluna
+        }
+    }
+    
+    // Se a lista estiver vazia, mostra a mensagem
+    if (DOM.ordersList.children.length === 0) {
+        showOrdersPlaceholder(DOM.ordersList.classList.contains('kanban-board') ? 'pending' : 'delivered');
+    }
+};
+
+/**
+ * Exibe a mensagem de "Nenhum pedido"
+ */
+const showOrdersPlaceholder = (viewType) => {
+    const message = viewType === 'pending' ? 'Nenhum pedido pendente.' : 'Nenhum pedido entregue encontrado.';
+    const colSpanClass = viewType === 'pending' ? 'w-full' : 'col-span-full';
+    DOM.ordersList.innerHTML = `<div class="${colSpanClass} text-center py-10 text-gray-500 orders-placeholder">${message}</div>`;
+};
+
+/**
+ * Função principal de renderização inicial de pedidos
+ */
 export const renderOrders = (allOrders, currentOrdersView) => {
     DOM.loadingIndicator.style.display = 'none';
-    DOM.ordersList.className = ''; 
-
+    setupOrderListContainer(currentOrdersView);
+    
+    let ordersToRender;
+    
     if (currentOrdersView === 'pending') {
-        DOM.ordersList.classList.add('kanban-board');
-        const nonDeliveredOrders = allOrders.filter(o => o.orderStatus !== 'Entregue');
-        
-        if (nonDeliveredOrders.length === 0) {
-            DOM.ordersList.innerHTML = '<div class="w-full text-center py-10 text-gray-500">Nenhum pedido pendente.</div>';
-            return;
-        }
-        
-        nonDeliveredOrders.sort((a, b) => new Date(a.deliveryDate || '9999-12-31') - new Date(b.deliveryDate || '9999-12-31'));
-        
-        const groupedOrders = nonDeliveredOrders.reduce((acc, order) => {
-            const date = order.deliveryDate || 'Sem Data';
-            if (!acc[date]) acc[date] = [];
-            acc[date].push(order);
-            return acc;
-        }, {});
-
-        let html = '';
-        for (const date in groupedOrders) {
-            const orders = groupedOrders[date];
-            const formattedDate = date === 'Sem Data' ?
-                'Sem Data de Entrega' :
-                new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-            
-            html += `
-                <div class="kanban-column">
-                    <h2 class="font-bold text-lg text-gray-700 mb-4 flex items-center">
-                        ${formattedDate}
-                        <span class="ml-2 text-sm font-medium bg-slate-200 text-slate-600 rounded-full px-2 py-0.5">${orders.length}</span>
-                    </h2>
-                    <div class="space-y-4">${orders.map(order => generateOrderCardHTML(order, 'pending')).join('')}</div>
-                </div>`;
-        }
-        DOM.ordersList.innerHTML = html;
-
+        ordersToRender = allOrders.filter(o => o.orderStatus !== 'Entregue');
+        // Ordena por data e depois por nome
+        ordersToRender.sort((a, b) => {
+            const dateA = a.deliveryDate || '9999-12-31';
+            const dateB = b.deliveryDate || '9999-12-31';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return a.clientName.localeCompare(b.clientName);
+        });
     } else { 
-        DOM.ordersList.classList.add('grid', 'grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-4', '2xl:grid-cols-5', 'gap-6');
-        const deliveredOrders = allOrders.filter(o => o.orderStatus === 'Entregue');
-        
-        if (deliveredOrders.length === 0) {
-            DOM.ordersList.innerHTML = '<p class="col-span-full text-center py-10 text-gray-500">Nenhum pedido entregue encontrado.</p>';
-            return;
-        }
-        
-        deliveredOrders.sort((a, b) => new Date(b.deliveryDate || 0) - new Date(a.deliveryDate || 0));
-        DOM.ordersList.innerHTML = deliveredOrders.map(order => generateOrderCardHTML(order, 'delivered')).join('');
+        ordersToRender = allOrders.filter(o => o.orderStatus === 'Entregue');
+        // Ordena por data (mais novos primeiro)
+        ordersToRender.sort((a, b) => (b.deliveryDate || 0).localeCompare(a.deliveryDate || 0));
     }
+
+    if (ordersToRender.length === 0) {
+        showOrdersPlaceholder(currentOrdersView);
+        return;
+    }
+    
+    // Chama a função granular para construir a UI inicial
+    ordersToRender.forEach(order => addOrderCard(order, currentOrdersView));
 };
 
 const sortSizes = (sizesObject) => {
@@ -451,10 +625,123 @@ export const viewOrder = (order) => {
     DOM.viewModal.classList.remove('hidden');
 };
 
-// Funções de Renderização Financeira
-export const renderFinanceDashboard = (allTransactions, userBankBalanceConfig) => {
-    if (!DOM.periodFilter) return;
 
+// ==========================================================
+// SEÇÃO DE RENDERIZAÇÃO FINANCEIRA
+// ==========================================================
+
+/**
+ * Cria o HTML para uma única linha de transação (mas não a insere)
+ * @returns {string} String HTML da <tr>
+ */
+const generateTransactionRowHTML = (t) => {
+    const isIncome = t.type === 'income';
+    const isReceivable = isIncome && t.status === 'a_receber';
+    
+    const amountClass = isIncome ? 'text-green-600' : 'text-red-600';
+    const formattedDate = new Date(t.date + 'T00:00:00').toLocaleDateString('pt-BR');
+    const transactionAmount = typeof t.amount === 'number' ? t.amount.toFixed(2) : '0.00';
+    
+    const statusBadge = isReceivable ? `<span class="ml-2 text-xs font-semibold py-1 px-2 rounded-full bg-yellow-100 text-yellow-800">A Receber</span>` : '';
+    const sourceBadge = `<span class="text-xs font-semibold py-1 px-2 rounded-full ${t.source === 'caixa' ? 'bg-gray-200 text-gray-800' : 'bg-indigo-100 text-indigo-800'}">${t.source === 'caixa' ? 'Caixa' : 'Banco'}</span>`;
+
+    let actionsHtml = `
+        <button data-id="${t.id}" class="edit-transaction-btn text-blue-500 hover:underline text-sm">Editar</button>
+        <button data-id="${t.id}" class="delete-transaction-btn text-red-500 hover:underline text-sm ml-2">Excluir</button>
+    `;
+
+    if (isReceivable) {
+        actionsHtml = `<button data-id="${t.id}" class="mark-as-paid-btn text-green-600 hover:underline text-sm font-semibold">Receber</button> ` + actionsHtml;
+    }
+
+    return `
+        <td class="py-3 px-4">${formattedDate}</td>
+        <td class="py-3 px-4 flex items-center">${t.description} ${statusBadge}</td>
+        <td class="py-3 px-4 text-gray-600">${t.category || ''}</td>
+        <td class="py-3 px-4">${sourceBadge}</td>
+        <td class="py-3 px-4 text-right font-semibold ${amountClass}">
+            ${isIncome ? '+' : '-'} R$ ${transactionAmount}
+        </td>
+        <td class="py-3 px-4 text-right">
+            ${actionsHtml}
+        </td>
+    `;
+};
+
+/**
+ * Adiciona uma linha de transação à tabela
+ */
+export const addTransactionRow = (transaction) => {
+    const tr = document.createElement('tr');
+    tr.className = `border-b hover:bg-gray-50 ${transaction.status === 'a_receber' ? 'bg-yellow-50' : ''}`;
+    tr.dataset.id = transaction.id;
+    tr.dataset.date = transaction.date;
+    tr.innerHTML = generateTransactionRowHTML(transaction);
+
+    // Insere ordenado por data (mais novo primeiro)
+    const allRows = Array.from(DOM.transactionsList.querySelectorAll('tr[data-id]'));
+    let inserted = false;
+    for (const existingRow of allRows) {
+        if (transaction.date > existingRow.dataset.date) {
+            DOM.transactionsList.insertBefore(tr, existingRow);
+            inserted = true;
+            break;
+        }
+    }
+    if (!inserted) {
+        DOM.transactionsList.appendChild(tr);
+    }
+    
+    // Remove placeholder se existir
+    const placeholder = DOM.transactionsList.querySelector('.transactions-placeholder');
+    if (placeholder) placeholder.remove();
+};
+
+/**
+ * Atualiza uma linha de transação existente
+ */
+export const updateTransactionRow = (transaction) => {
+    const row = DOM.transactionsList.querySelector(`tr[data-id="${transaction.id}"]`);
+    if (row) {
+        // Apenas atualiza o conteúdo e as classes
+        row.className = `border-b hover:bg-gray-50 ${transaction.status === 'a_receber' ? 'bg-yellow-50' : ''}`;
+        row.innerHTML = generateTransactionRowHTML(transaction);
+        // Remove e readiciona para garantir a ordenação correta
+        const oldDate = row.dataset.date;
+        if (transaction.date !== oldDate) {
+            row.remove();
+            addTransactionRow(transaction);
+        }
+    }
+};
+
+/**
+ * Remove uma linha de transação da tabela
+ */
+export const removeTransactionRow = (transactionId) => {
+    const row = DOM.transactionsList.querySelector(`tr[data-id="${transactionId}"]`);
+    if (row) {
+        row.remove();
+    }
+    
+    // Mostra placeholder se a lista ficar vazia
+    if (DOM.transactionsList.children.length === 0) {
+        showTransactionsPlaceholder(false);
+    }
+};
+
+/**
+ * Exibe a mensagem de "Nenhum lançamento"
+ */
+const showTransactionsPlaceholder = (isSearch) => {
+    const message = isSearch ? 'Nenhum lançamento encontrado para a busca.' : 'Nenhum lançamento encontrado para este período.';
+    DOM.transactionsList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-gray-500 transactions-placeholder">${message}</td></tr>`;
+};
+
+/**
+ * Renderiza apenas os KPIs (cards superiores) do dashboard financeiro
+ */
+export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
     const filterValue = DOM.periodFilter.value;
     const now = new Date();
     let startDate, endDate;
@@ -558,87 +845,45 @@ export const renderFinanceDashboard = (allTransactions, userBankBalanceConfig) =
 
     formatCategoryList(expenseCategories, DOM.topExpensesByCategory);
     formatCategoryList(incomeCategories, DOM.topIncomesByCategory);
+    
+    return filteredTransactions;
+};
 
+/**
+ * Função principal de renderização do dashboard financeiro (para carga inicial ou filtros)
+ */
+export const renderFinanceDashboard = (allTransactions, userBankBalanceConfig) => {
+    if (!DOM.periodFilter) return;
+
+    // 1. Renderiza os KPIs e obtém as transações filtradas
+    const filteredTransactions = renderFinanceKPIs(allTransactions, userBankBalanceConfig);
+
+    // 2. Filtra por busca
     const searchTerm = DOM.transactionSearchInput.value.toLowerCase();
     const displayTransactions = searchTerm ?
         filteredTransactions.filter(t => t.description.toLowerCase().includes(searchTerm)) :
         filteredTransactions;
-
-    const transactionsHtml = displayTransactions.map(t => {
-        const isIncome = t.type === 'income';
-        const isReceivable = isIncome && t.status === 'a_receber';
         
-        const amountClass = isIncome ? 'text-green-600' : 'text-red-600';
-        const formattedDate = new Date(t.date + 'T00:00:00').toLocaleDateString('pt-BR');
-        const transactionAmount = typeof t.amount === 'number' ? t.amount.toFixed(2) : '0.00';
-        
-        const statusBadge = isReceivable ? `<span class="ml-2 text-xs font-semibold py-1 px-2 rounded-full bg-yellow-100 text-yellow-800">A Receber</span>` : '';
-        const sourceBadge = `<span class="text-xs font-semibold py-1 px-2 rounded-full ${t.source === 'caixa' ? 'bg-gray-200 text-gray-800' : 'bg-indigo-100 text-indigo-800'}">${t.source === 'caixa' ? 'Caixa' : 'Banco'}</span>`;
-
-        let actionsHtml = `
-            <button data-id="${t.id}" class="edit-transaction-btn text-blue-500 hover:underline text-sm">Editar</button>
-            <button data-id="${t.id}" class="delete-transaction-btn text-red-500 hover:underline text-sm ml-2">Excluir</button>
-        `;
-
-        if (isReceivable) {
-            actionsHtml = `<button data-id="${t.id}" class="mark-as-paid-btn text-green-600 hover:underline text-sm font-semibold">Receber</button> ` + actionsHtml;
-        }
-
-        return `
-            <tr class="border-b hover:bg-gray-50 ${isReceivable ? 'bg-yellow-50' : ''}">
-                <td class="py-3 px-4">${formattedDate}</td>
-                <td class="py-3 px-4 flex items-center">${t.description} ${statusBadge}</td>
-                <td class="py-3 px-4 text-gray-600">${t.category || ''}</td>
-                <td class="py-3 px-4">${sourceBadge}</td>
-                <td class="py-3 px-4 text-right font-semibold ${amountClass}">
-                    ${isIncome ? '+' : '-'} R$ ${transactionAmount}
-                </td>
-                <td class="py-3 px-4 text-right">
-                    ${actionsHtml}
-                </td>
-            </tr>`;
-    }).join('');
-
-    DOM.transactionsList.innerHTML = transactionsHtml || `<tr><td colspan="6" class="text-center py-4 text-gray-500">${searchTerm ? 'Nenhum lançamento encontrado para a busca.' : 'Nenhum lançamento encontrado para este período.'}</td></tr>`;
-};
-
-// Funções de UI Tabela de Preços
-export const renderPriceTable = (allPricingItems, mode = 'view') => {
-    const isEditMode = mode === 'edit';
-    DOM.priceTableContainer.innerHTML = ''; 
-
-    let tableHTML = `
-        <table class="w-full text-left table-auto">
-            <thead>
-                <tr class="bg-gray-100">
-                    <th class="p-3 text-sm font-semibold text-gray-700 w-1/3">Serviço/Item</th>
-                    <th class="p-3 text-sm font-semibold text-gray-700 w-1/2">Descrição</th>
-                    <th class="p-3 text-sm font-semibold text-gray-700 text-right">Preço (R$)</th>
-                    ${isEditMode ? '<th class="p-3 text-sm font-semibold text-gray-700 text-center w-16">Ação</th>' : ''}
-                </tr>
-            </thead>
-            <tbody id="priceTableBody"></tbody>
-        </table>
-    `;
-    DOM.priceTableContainer.innerHTML = tableHTML;
-    const tableBody = document.getElementById('priceTableBody');
-    
-    if (allPricingItems.length === 0 && !isEditMode) {
-        tableBody.innerHTML = `<tr><td colspan="3" class="text-center p-6 text-gray-500">Nenhum item na tabela de preços. Clique em "Editar" para adicionar.</td></tr>`;
-    } else {
-        allPricingItems.forEach(item => {
-            tableBody.appendChild(createPriceTableRow(item, mode));
-        });
+    // 3. Renderiza a lista de transações (apenas na carga inicial/filtro)
+    DOM.transactionsList.innerHTML = ''; // Limpa a lista
+    if (displayTransactions.length === 0) {
+        showTransactionsPlaceholder(searchTerm.length > 0);
+        return;
     }
     
-    DOM.editPriceTableBtn.classList.toggle('hidden', isEditMode);
-    DOM.closePriceTableBtn.classList.toggle('hidden', isEditMode);
-    DOM.priceTableEditMessage.classList.toggle('hidden', !isEditMode);
-    DOM.savePriceTableBtn.classList.toggle('hidden', !isEditMode);
-    DOM.cancelPriceTableBtn.classList.toggle('hidden', !isEditMode);
-    DOM.addPriceItemBtn.classList.toggle('hidden', !isEditMode);
+    // Ordena por data (mais novo primeiro)
+    displayTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    displayTransactions.forEach(addTransactionRow);
 };
 
+
+// ==========================================================
+// SEÇÃO DE RENDERIZAÇÃO DA TABELA DE PREÇOS
+// ==========================================================
+
+/**
+ * Cria uma linha da tabela de preços (HTML ou Elemento)
+ */
 export const createPriceTableRow = (item, mode) => {
     const tr = document.createElement('tr');
     tr.className = 'border-b hover:bg-gray-50';
@@ -663,7 +908,101 @@ export const createPriceTableRow = (item, mode) => {
     return tr;
 };
 
-// Funções de Gerenciamento do Formulário de Pedidos
+/**
+ * Adiciona uma linha na tabela de preços
+ */
+export const addPriceTableRow = (item, mode) => {
+    const tableBody = document.getElementById('priceTableBody');
+    if (!tableBody) return;
+    
+    const tr = createPriceTableRow(item, mode);
+    tableBody.appendChild(tr);
+    
+    // Remove placeholder
+    const placeholder = tableBody.querySelector('.pricing-placeholder');
+    if (placeholder) placeholder.remove();
+};
+
+/**
+ * Atualiza uma linha da tabela de preços
+ */
+export const updatePriceTableRow = (item, mode) => {
+    const tableBody = document.getElementById('priceTableBody');
+    if (!tableBody) return;
+    
+    const row = tableBody.querySelector(`tr[data-id="${item.id}"]`);
+    if (row) {
+        const tr = createPriceTableRow(item, mode);
+        row.replaceWith(tr);
+    }
+};
+
+/**
+ * Remove uma linha da tabela de preços
+ */
+export const removePriceTableRow = (itemId) => {
+    const tableBody = document.getElementById('priceTableBody');
+    if (!tableBody) return;
+
+    const row = tableBody.querySelector(`tr[data-id="${itemId}"]`);
+    if (row) {
+        row.remove();
+    }
+    
+    // Adiciona placeholder se a tabela ficar vazia
+    if (tableBody.children.length === 0 && !DOM.addPriceItemBtn.classList.contains('hidden')) { // Apenas se estiver em modo de edição
+         tableBody.innerHTML = `<tr class="pricing-placeholder"><td colspan="4" class="text-center p-6 text-gray-500">Nenhum item. Clique em "Adicionar Item".</td></tr>`;
+    }
+};
+
+/**
+ * Função principal de renderização da tabela de preços (carga inicial)
+ */
+export const renderPriceTable = (allPricingItems, mode = 'view') => {
+    const isEditMode = mode === 'edit';
+    DOM.priceTableContainer.innerHTML = ''; 
+
+    let tableHTML = `
+        <table class="w-full text-left table-auto">
+            <thead>
+                <tr class="bg-gray-100">
+                    <th class="p-3 text-sm font-semibold text-gray-700 w-1/3">Serviço/Item</th>
+                    <th class="p-3 text-sm font-semibold text-gray-700 w-1/2">Descrição</th>
+                    <th class="p-3 text-sm font-semibold text-gray-700 text-right">Preço (R$)</th>
+                    ${isEditMode ? '<th class="p-3 text-sm font-semibold text-gray-700 text-center w-16">Ação</th>' : ''}
+                </tr>
+            </thead>
+            <tbody id="priceTableBody"></tbody>
+        </table>
+    `;
+    DOM.priceTableContainer.innerHTML = tableHTML;
+    const tableBody = document.getElementById('priceTableBody');
+    
+    if (allPricingItems.length === 0) {
+        const colSpan = isEditMode ? 4 : 3;
+        const message = isEditMode ? 'Nenhum item. Clique em "Adicionar Item".' : 'Nenhum item na tabela de preços. Clique em "Editar" para adicionar.';
+        tableBody.innerHTML = `<tr class="pricing-placeholder"><td colspan="${colSpan}" class="text-center p-6 text-gray-500">${message}</td></tr>`;
+    } else {
+        // Usa a função granular para construir a lista inicial
+        allPricingItems.forEach(item => {
+            const tr = createPriceTableRow(item, mode);
+            tableBody.appendChild(tr);
+        });
+    }
+    
+    DOM.editPriceTableBtn.classList.toggle('hidden', isEditMode);
+    DOM.closePriceTableBtn.classList.toggle('hidden', isEditMode);
+    DOM.priceTableEditMessage.classList.toggle('hidden', !isEditMode);
+    DOM.savePriceTableBtn.classList.toggle('hidden', !isEditMode);
+    DOM.cancelPriceTableBtn.classList.toggle('hidden', !isEditMode);
+    DOM.addPriceItemBtn.classList.toggle('hidden', !isEditMode);
+};
+
+
+// ==========================================================
+// SEÇÃO DO FORMULÁRIO DE PEDIDOS (LÓGICA INTERNA)
+// ==========================================================
+
 export const updateFinancials = () => {
     let subtotal = 0;
     DOM.financialsContainer.querySelectorAll('.financial-item').forEach(item => {
@@ -921,7 +1260,10 @@ export const populateFormForEdit = (orderData, currentPartCounter) => {
     return currentPartCounter;
 };
 
-// Funções de UI para Lançamentos Financeiros
+// ==========================================================
+// OUTRAS FUNÇÕES DE UI (Sem alteração)
+// ==========================================================
+
 export const updateSourceSelectionUI = (selectedSource) => {
     DOM.transactionSourceContainer.querySelectorAll('.source-selector').forEach(btn => {
         const isSelected = btn.dataset.source === selectedSource;
@@ -931,7 +1273,6 @@ export const updateSourceSelectionUI = (selectedSource) => {
     });
 };
 
-// Funções de UI para Opções (Datalists)
 export const populateDatalists = (partTypes, materialTypes) => {
     DOM.partTypeList.innerHTML = partTypes.map(opt => `<option value="${opt}"></option>`).join('');
     DOM.partMaterialList.innerHTML = materialTypes.map(opt => `<option value="${opt}"></option>`).join('');
@@ -949,8 +1290,6 @@ export const openOptionsModal = (type, options) => {
     DOM.optionsModal.classList.remove('hidden');
 };
 
-// **NOVA FUNÇÃO**
-// Função para aplicar máscara de telefone (xx) xxxxx-xxxx
 export const formatPhoneNumber = (value) => {
     if (!value) return "";
     value = value.replace(/\D/g,'');             // Remove tudo o que não é dígito
