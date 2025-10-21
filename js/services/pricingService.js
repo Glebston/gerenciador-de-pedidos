@@ -13,17 +13,50 @@ let unsubscribeListener = null;   // Função para desligar o listener do Firest
 
 /**
  * Configura o listener em tempo real para a coleção de preços.
- * @param {function} renderCallback - A função (do ui.js) que será chamada para redesenhar a tabela.
+ * @param {function} granularUpdateCallback - A função (do main.js) que será chamada para cada mudança granular.
  */
-const setupPricingListener = (renderCallback) => {
+const setupPricingListener = (granularUpdateCallback) => {
     if (unsubscribeListener) unsubscribeListener();
 
     const q = query(pricingCollection, orderBy("createdAt", "asc"));
     unsubscribeListener = onSnapshot(q, (snapshot) => {
-        allPricingItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        if (renderCallback) {
-            renderCallback(allPricingItems);
-        }
+        
+        snapshot.docChanges().forEach((change) => {
+            // --- CORREÇÃO v4.2: A verificação 'hasPendingWrites' foi REMOVIDA daqui ---
+            // Isso garante que a tabela de preços se atualize
+            // imediatamente após o usuário salvar as alterações.
+
+            const data = { id: change.doc.id, ...change.doc.data() };
+            const index = allPricingItems.findIndex(p => p.id === data.id);
+
+            // Gerencia o cache local
+            if (change.type === 'added') {
+                if (index === -1) {
+                    // Para manter a ordem 'createdAt', a inserção é mais complexa.
+                    // A solução mais simples para este caso (lista menor) é reordenar após inserir.
+                    allPricingItems.push(data);
+                }
+            } else if (change.type === 'modified') {
+                if (index > -1) {
+                    allPricingItems[index] = data; // Atualiza o item no cache
+                } else {
+                    allPricingItems.push(data); // Adiciona se não existia
+                }
+            } else if (change.type === 'removed') {
+                if (index > -1) {
+                    allPricingItems.splice(index, 1); // Remove do cache
+                }
+            }
+            
+            // Invoca o callback granular
+            if (granularUpdateCallback) {
+                granularUpdateCallback(change.type, data);
+            }
+        });
+        
+        // Garante a ordenação após 'adds'
+        allPricingItems.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+
     }, (error) => {
         console.error("Erro ao carregar tabela de preços:", error);
     });
@@ -35,11 +68,11 @@ const setupPricingListener = (renderCallback) => {
 /**
  * Inicializa o serviço de preços para uma empresa específica.
  * @param {string} companyId - O ID da empresa do usuário logado.
- * @param {function} renderCallback - A função de renderização da UI para a tabela de preços.
+ * @param {function} granularUpdateCallback - A função de callback granular (em main.js).
  */
-export const initializePricingService = (companyId, renderCallback) => {
+export const initializePricingService = (companyId, granularUpdateCallback) => {
     pricingCollection = collection(db, `companies/${companyId}/pricing`);
-    setupPricingListener(renderCallback);
+    setupPricingListener(granularUpdateCallback);
 };
 
 /**
@@ -82,7 +115,7 @@ export const deletePriceItem = async (itemId) => {
  * @returns {Array}
  */
 export const getAllPricingItems = () => {
-    return allPricingItems;
+    return [...allPricingItems]; // Retorna cópia
 };
 
 /**
