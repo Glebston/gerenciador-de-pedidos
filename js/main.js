@@ -64,9 +64,18 @@ const initializeAppLogic = async (user) => {
         }
         UI.DOM.userEmail.textContent = userCompanyName;
         
-        initializeOrderService(userCompanyId, UI.renderOrders, () => currentOrdersView);
-        initializeFinanceService(userCompanyId, UI.renderFinanceDashboard, () => userBankBalanceConfig);
-        initializePricingService(userCompanyId, (items) => UI.renderPriceTable(items, 'view'));
+        // --- INICIALIZAÇÃO REATIVA (PÓS-REATORAÇÃO) ---
+        // 1. Inicializa os serviços passando os NOVOS handlers
+        initializeOrderService(userCompanyId, handleOrderChange, () => currentOrdersView);
+        initializeFinanceService(userCompanyId, handleFinanceChange, () => userBankBalanceConfig);
+        initializePricingService(userCompanyId, handlePricingChange);
+        
+        // 2. Renderiza a UI inicial usando o cache (que ainda está vazio)
+        UI.renderOrders(getAllOrders(), currentOrdersView);
+        UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig);
+        // A tabela de preços é renderizada quando o modal é aberto
+        
+        // --- FIM DA INICIALIZAÇÃO REATIVA ---
         
         initializeIdleTimer(UI.DOM, handleLogout);
         initializeAndPopulateDatalists();
@@ -106,7 +115,158 @@ onAuthStateChanged(auth, (user) => {
 
 
 // ========================================================
-// PARTE 4: FUNÇÕES DE LÓGICA TRANSVERSAL (Cross-Cutting)
+// PARTE 4: HANDLERS DE MUDANÇA (LÓGICA REATIVA)
+// ========================================================
+
+/**
+ * Lida com mudanças granulares vindas do orderService
+ * @param {string} type - 'added', 'modified', 'removed'
+ * @param {object} order - O documento do pedido
+ * @param {string} viewType - O 'currentOrdersView' ('pending' ou 'delivered')
+ */
+const handleOrderChange = (type, order, viewType) => {
+    // --- CORREÇÃO v4.2.1: Lógica de Roteamento ---
+    
+    const isDelivered = order.orderStatus === 'Entregue';
+
+    // Rota 1: Estamos na view 'pending'
+    if (viewType === 'pending') {
+        // Se o pedido foi marcado como 'Entregue' (vindo de 'added' ou 'modified')
+        if (isDelivered) {
+            // DEVE ser removido da view 'pending'
+            UI.removeOrderCard(order.id);
+            return;
+        } else {
+            // Se NÃO está 'Entregue', processa normalmente
+            switch (type) {
+                case 'added':
+                    UI.addOrderCard(order, viewType);
+                    break;
+                case 'modified':
+                    UI.updateOrderCard(order, viewType);
+                    break;
+                case 'removed':
+                    UI.removeOrderCard(order.id);
+                    break;
+            }
+        }
+    } 
+    // Rota 2: Estamos na view 'delivered'
+    else if (viewType === 'delivered') {
+        // Se o pedido NÃO está 'Entregue' (ex: foi movido de volta para 'pendente')
+        if (!isDelivered) {
+            // DEVE ser removido da view 'delivered'
+            UI.removeOrderCard(order.id);
+            return;
+        } else {
+             // Se ESTÁ 'Entregue', processa normalmente
+            switch (type) {
+                case 'added':
+                    UI.addOrderCard(order, viewType);
+                    break;
+                case 'modified':
+                    UI.updateOrderCard(order, viewType);
+                    break;
+                case 'removed':
+                    UI.removeOrderCard(order.id);
+                    break;
+            }
+        }
+    }
+    // --- FIM DA CORREÇÃO ---
+};
+
+/**
+ * Lida com mudanças granulares vindas do financeService
+ * @param {string} type - 'added', 'modified', 'removed'
+ * @param {object} transaction - O documento da transação
+ * @param {object} config - O userBankBalanceConfig
+ */
+const handleFinanceChange = (type, transaction, config) => {
+    // 1. Atualiza os KPIs (cards superiores) em TODA mudança, pois qualquer evento afeta os totais
+    UI.renderFinanceKPIs(getAllTransactions(), config);
+    
+    // 2. Verifica se a transação passa nos filtros atuais (data e busca) antes de atualizar a tabela
+    const filter = UI.DOM.periodFilter.value;
+    const now = new Date();
+    let startDate, endDate;
+
+    if (filter === 'custom') {
+        startDate = UI.DOM.startDateInput.value ? new Date(UI.DOM.startDateInput.value + 'T00:00:00') : null;
+        endDate = UI.DOM.endDateInput.value ? new Date(UI.DOM.endDateInput.value + 'T23:59:59') : null;
+    } else {
+        const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+        const startOfThisYear = new Date(now.getFullYear(), 0, 1);
+        const endOfThisYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        if (filter === 'thisMonth') { startDate = startOfThisMonth; endDate = endOfThisMonth; }
+        if (filter === 'lastMonth') { startDate = startOfLastMonth; endDate = endOfLastMonth; }
+        if (filter === 'thisYear') { startDate = startOfThisYear; endDate = endOfThisYear; }
+    }
+    
+    const transactionDate = new Date(transaction.date + 'T00:00:00');
+    let passesDateFilter = true;
+    if (startDate && endDate) passesDateFilter = transactionDate >= startDate && transactionDate <= endDate;
+    else if(startDate && !endDate) passesDateFilter = transactionDate >= startDate;
+    else if(!startDate && endDate) passesDateFilter = transactionDate <= endDate;
+
+    const searchTerm = UI.DOM.transactionSearchInput.value.toLowerCase();
+    const passesSearchFilter = transaction.description.toLowerCase().includes(searchTerm);
+
+    if (!passesDateFilter || !passesSearchFilter) {
+        // Se não passa no filtro, pode ser que o item estivesse na lista e precise ser removido
+        if (type === 'modified' || type === 'removed') {
+             UI.removeTransactionRow(transaction.id);
+        }
+        return; // Ignora 'added' que não passa no filtro
+    }
+
+    // 3. Se passou nos filtros, atualiza a tabela
+    switch (type) {
+        case 'added':
+            UI.addTransactionRow(transaction);
+            break;
+        case 'modified':
+            UI.updateTransactionRow(transaction);
+            break;
+        case 'removed':
+            UI.removeTransactionRow(transaction.id);
+            break;
+    }
+};
+
+/**
+ * Lida com mudanças granulares vindas do pricingService
+ * @param {string} type - 'added', 'modified', 'removed'
+ * @param {object} item - O documento do item de preço
+ */
+const handlePricingChange = (type, item) => {
+    // O modal de preços pode não estar aberto, mas atualizamos mesmo assim
+    // A função `renderPriceTable` é chamada quando o modal abre,
+    // mas as funções granulares atualizam se ele JÁ ESTIVER aberto.
+    
+    // Precisamos saber se estamos em 'view' ou 'edit' mode
+    const isEditMode = !UI.DOM.editPriceTableBtn.classList.contains('hidden');
+    const mode = isEditMode ? 'view' : 'edit';
+    
+    switch (type) {
+        case 'added':
+            UI.addPriceTableRow(item, mode);
+            break;
+        case 'modified':
+            UI.updatePriceTableRow(item, mode);
+            break;
+        case 'removed':
+            UI.removePriceTableRow(item.id);
+            break;
+    }
+};
+
+
+// ========================================================
+// PARTE 5: FUNÇÕES DE LÓGICA TRANSVERSAL (Cross-Cutting)
 // ========================================================
 
 const getOptionsFromStorage = (type) => {
@@ -245,7 +405,7 @@ const collectFormData = () => {
 };
 
 // ========================================================
-// PARTE 5: EVENT LISTENERS (A "COLA" DA APLICAÇÃO)
+// PARTE 6: EVENT LISTENERS (A "COLA" DA APLICAÇÃO)
 // ========================================================
 
 // --- Inicialização e Eventos Globais ---
@@ -263,7 +423,11 @@ UI.DOM.financeDashboardBtn.addEventListener('click', () => {
     UI.DOM.financeDashboard.classList.toggle('hidden', currentDashboardView === 'orders');
     UI.updateNavButton(currentDashboardView);
     if (currentDashboardView === 'finance') {
+        // Renderiza o dashboard financeiro (KPIs e lista) ao trocar para esta view
         UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig);
+    } else {
+        // Renderiza os pedidos ao trocar para esta view
+        UI.renderOrders(getAllOrders(), currentOrdersView);
     }
 });
 
@@ -278,6 +442,7 @@ document.addEventListener('click', (e) => {
 UI.DOM.toggleViewBtn.addEventListener('click', () => {
     currentOrdersView = currentOrdersView === 'pending' ? 'delivered' : 'pending';
     UI.DOM.toggleViewBtn.textContent = currentOrdersView === 'pending' ? 'Ver Entregues' : 'Ver Pendentes';
+    // Faz uma renderização completa com base no cache local ao trocar de view
     UI.renderOrders(getAllOrders(), currentOrdersView);
 });
 UI.DOM.backupBtn.addEventListener('click', handleBackup);
@@ -421,11 +586,9 @@ UI.DOM.addPartBtn.addEventListener('click', () => { partCounter++; UI.addPart({}
 UI.DOM.downPayment.addEventListener('input', UI.updateFinancials);
 UI.DOM.discount.addEventListener('input', UI.updateFinancials);
 
-// **NOVO LISTENER ADICIONADO ABAIXO**
 UI.DOM.clientPhone.addEventListener('input', (e) => {
   e.target.value = UI.formatPhoneNumber(e.target.value);
 });
-// **FIM DO NOVO LISTENER**
 
 UI.DOM.partsContainer.addEventListener('click', (e) => { 
     const btn = e.target.closest('button.manage-options-btn'); 
@@ -533,6 +696,7 @@ UI.DOM.transactionsList.addEventListener('click', (e) => {
     }
 });
 
+// Filtros do Dashboard Financeiro - agora renderizam TUDO (KPIs e Lista)
 UI.DOM.periodFilter.addEventListener('change', () => { 
     UI.DOM.customPeriodContainer.classList.toggle('hidden', UI.DOM.periodFilter.value !== 'custom'); 
     UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig); 
@@ -541,6 +705,7 @@ UI.DOM.periodFilter.addEventListener('change', () => {
 [UI.DOM.startDateInput, UI.DOM.endDateInput, UI.DOM.transactionSearchInput].forEach(element => {
     if(element) element.addEventListener('input', () => UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig));
 });
+// ---
 
 UI.DOM.adjustBalanceBtn.addEventListener('click', () => {
     UI.DOM.initialBalanceInput.value = (userBankBalanceConfig.initialBalance || 0).toFixed(2);
@@ -555,6 +720,7 @@ UI.DOM.saveBalanceBtn.addEventListener('click', async () => {
     }
     await saveInitialBalance(newBalance);
     userBankBalanceConfig.initialBalance = newBalance;
+    // Renderiza KPIs e lista, pois o saldo em conta mudou
     UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig);
     UI.DOM.initialBalanceModal.classList.add('hidden');
 });
@@ -590,15 +756,20 @@ UI.DOM.optionsList.addEventListener('click', (e) => {
 
 // --- Tabela de Preços ---
 UI.DOM.priceTableBtn.addEventListener('click', () => { 
+    // Renderiza a tabela com o cache local atual ao abrir
     UI.renderPriceTable(getAllPricingItems(), 'view'); 
     UI.DOM.priceTableModal.classList.remove('hidden'); 
 });
 UI.DOM.closePriceTableBtn.addEventListener('click', () => UI.DOM.priceTableModal.classList.add('hidden'));
 UI.DOM.editPriceTableBtn.addEventListener('click', () => UI.renderPriceTable(getAllPricingItems(), 'edit'));
 UI.DOM.cancelPriceTableBtn.addEventListener('click', () => UI.renderPriceTable(getAllPricingItems(), 'view'));
+
 UI.DOM.addPriceItemBtn.addEventListener('click', () => { 
-    document.getElementById('priceTableBody').appendChild(UI.createPriceTableRow({ id: `new-${Date.now()}` }, 'edit')); 
+    // Adiciona uma linha "new-" temporária
+    const newItem = { id: `new-${Date.now()}` };
+    UI.addPriceTableRow(newItem, 'edit');
 });
+
 UI.DOM.savePriceTableBtn.addEventListener('click', async () => {
     try {
         const itemsToSave = Array.from(document.getElementById('priceTableBody').querySelectorAll('tr'))
@@ -608,9 +779,13 @@ UI.DOM.savePriceTableBtn.addEventListener('click', async () => {
                 description: row.querySelector('.price-item-desc').value.trim(), 
                 price: parseFloat(row.querySelector('.price-item-price').value) || 0
             }))
-            .filter(item => item.name);
+            .filter(item => item.name); // Salva apenas se tiver nome
 
         await savePriceTableChanges(itemsToSave);
+        // O listener reativo (handlePricingChange) cuidará de atualizar a UI
+        // Mas mudamos para 'view' mode
+        UI.renderPriceTable(getAllPricingItems(), 'view');
+
     } catch (error) {
         console.error("Erro ao salvar tabela de preços:", error);
         UI.showInfoModal("Não foi possível salvar as alterações.");
@@ -620,12 +795,16 @@ UI.DOM.priceTableContainer.addEventListener('click', (e) => {
     const deleteBtn = e.target.closest('.delete-price-item-btn');
     if (deleteBtn) {
         const row = deleteBtn.closest('tr');
-        if (row.dataset.id.startsWith('new-')) {
-            row.remove();
+        const itemId = row.dataset.id;
+        
+        if (itemId.startsWith('new-')) {
+            // Se for novo (local), apenas remove da UI
+            UI.removePriceTableRow(itemId);
         } else {
+            // Se for existente, pede confirmação e deleta do DB
             UI.showConfirmModal("Tem certeza que deseja excluir este item?", "Excluir", "Cancelar")
               .then(ok => {
-                  if (ok) deletePriceItem(row.dataset.id);
+                  if (ok) deletePriceItem(itemId); // O listener cuidará de remover da UI
               });
         }
     }
