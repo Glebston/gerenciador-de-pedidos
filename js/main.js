@@ -35,6 +35,8 @@ let currentOrdersView = 'pending';
 let partCounter = 0;
 let currentOptionType = ''; // Para o modal de gerenciamento de opções
 
+// <-- ESTADO 'customerMap' REMOVIDO -->
+
 const defaultOptions = {
     partTypes: ['Gola redonda manga curta', 'Gola redonda manga longa', 'Gola redonda manga longa com capuz', 'Gola redonda manga curta (sublimada na frente)', 'Gola polo manga curta', 'Gola polo manga longa', 'Gola V manga curta', 'Gola V manga longa', 'Short', 'Calça'],
     materialTypes: ['Malha fria', 'Drifity', 'Cacharrel', 'PP', 'Algodão Fio 30', 'TNT drive', 'Piquê', 'Brim']
@@ -44,6 +46,9 @@ const defaultOptions = {
 // ========================================================
 // PARTE 3: LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO
 // ========================================================
+
+// <-- FUNÇÃO 'updateCustomerData' REMOVIDA -->
+
 
 const initializeAppLogic = async (user) => {
     const userMappingRef = doc(db, "user_mappings", user.uid);
@@ -74,11 +79,13 @@ const initializeAppLogic = async (user) => {
         UI.renderOrders(getAllOrders(), currentOrdersView);
         UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig);
         // A tabela de preços é renderizada quando o modal é aberto
+
+        // <-- CHAMADA 'updateCustomerData()' REMOVIDA -->
         
         // --- FIM DA INICIALIZAÇÃO REATIVA ---
         
         initializeIdleTimer(UI.DOM, handleLogout);
-        initializeAndPopulateDatalists();
+        initializeAndPopulateDatalists(); // Datalists de peças/materiais
         checkBackupReminder();
         triggerAutoBackupIfNeeded();
         UI.updateNavButton(currentDashboardView);
@@ -103,6 +110,7 @@ const cleanupApplication = () => {
     userCompanyId = null;
     userCompanyName = null;
     userBankBalanceConfig = { initialBalance: 0 };
+    // <-- LIMPEZA 'customerMap.clear()' REMOVIDA -->
 };
 
 onAuthStateChanged(auth, (user) => {
@@ -135,7 +143,7 @@ const handleOrderChange = (type, order, viewType) => {
         if (isDelivered) {
             // DEVE ser removido da view 'pending'
             UI.removeOrderCard(order.id);
-            return;
+            return; // <-- Retorna aqui, pois a UI não será afetada (diferente da versão com Mini-CRM)
         } else {
             // Se NÃO está 'Entregue', processa normalmente
             switch (type) {
@@ -157,9 +165,9 @@ const handleOrderChange = (type, order, viewType) => {
         if (!isDelivered) {
             // DEVE ser removido da view 'delivered'
             UI.removeOrderCard(order.id);
-            return;
+            return; // <-- Retorna aqui, pois a UI não será afetada (diferente da versão com Mini-CRM)
         } else {
-             // Se ESTÁ 'Entregue', processa normalmente
+             // Se ESTÁ 'Entregue', processa normally
             switch (type) {
                 case 'added':
                     UI.addOrderCard(order, viewType);
@@ -174,6 +182,8 @@ const handleOrderChange = (type, order, viewType) => {
         }
     }
     // --- FIM DA CORREÇÃO ---
+
+    // <-- CHAMADA 'updateCustomerData()' REMOVIDA -->
 };
 
 /**
@@ -333,6 +343,7 @@ const processRestore = async (ordersToRestore, transactionsToRestore) => {
             UI.showInfoModal(`Dados substituídos com sucesso.`);
         }
     }
+    // <-- CHAMADA 'updateCustomerData()' REMOVIDA -->
 };
 
 const handleRestore = (event) => {
@@ -482,15 +493,22 @@ UI.DOM.orderForm.addEventListener('submit', async (e) => {
         
         UI.DOM.orderModal.classList.add('hidden');
         
+        // --- CORREÇÃO v4.2.2: Lógica do Recibo ---
         if (orderData.orderStatus === 'Finalizado' || orderData.orderStatus === 'Entregue') {
-            const generate = await UI.showConfirmModal("Pedido salvo com sucesso! Deseja gerar o recibo de quitação?", "Sim, gerar recibo", "Não, obrigado");
+            const generate = await UI.showConfirmModal(
+                "Pedido salvo com sucesso! Deseja gerar o Recibo de Quitação e Entrega?", 
+                "Sim, gerar recibo", 
+                "Não, obrigado"
+            );
             if (generate) {
+                // Precisamos passar os dados completos para a função
                 const fullOrderData = { ...orderData, id: savedOrderId };
                 await generateReceiptPdf(fullOrderData, userCompanyName, UI.showInfoModal);
             }
         } else {
              UI.showInfoModal("Pedido salvo com sucesso!");
         }
+        // --- FIM DA CORREÇÃO ---
 
     } catch (error) { 
         console.error("Erro ao salvar pedido:", error);
@@ -538,6 +556,9 @@ UI.DOM.ordersList.addEventListener('click', (e) => {
             "Cancelar"
         ).then(confirmed => {
             if (confirmed) {
+                // --- CORREÇÃO v4.2.2: Lógica do Recibo no Atalho ---
+                
+                // 1. Calcula o valor total
                 let totalValue = 0;
                 (order.parts || []).forEach(p => {
                     const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
@@ -550,18 +571,29 @@ UI.DOM.ordersList.addEventListener('click', (e) => {
                 });
                 totalValue -= (order.discount || 0);
 
-                const updatedOrder = { ...order };
-                updatedOrder.downPayment = totalValue;
-                updatedOrder.orderStatus = 'Entregue';
+                // 2. Prepara os dados atualizados
+                const updatedOrderData = { ...order };
+                updatedOrderData.downPayment = totalValue;
+                updatedOrderData.orderStatus = 'Entregue';
 
-                saveOrder(updatedOrder, id)
-                    .then(() => {
-                        UI.showInfoModal("Pedido quitado e movido para 'Entregues' com sucesso!");
+                // 3. Salva no banco
+                saveOrder(updatedOrderData, id)
+                    .then(async () => { // Adiciona 'async'
+                        // 4. Pergunta sobre o recibo (A NOVA LÓGICA)
+                        const generate = await UI.showConfirmModal(
+                            "Pedido quitado e movido para 'Entregues' com sucesso! Deseja gerar o Recibo de Quitação e Entrega?",
+                            "Sim, gerar recibo",
+                            "Não, obrigado"
+                        );
+                        if (generate) {
+                            await generateReceiptPdf(updatedOrderData, userCompanyName, UI.showInfoModal);
+                        }
                     })
                     .catch(error => {
                         console.error("Erro ao quitar e entregar pedido:", error);
                         UI.showInfoModal("Ocorreu um erro ao atualizar o pedido.");
                     });
+                // --- FIM DA CORREÇÃO ---
             }
         });
     }
@@ -586,8 +618,10 @@ UI.DOM.addPartBtn.addEventListener('click', () => { partCounter++; UI.addPart({}
 UI.DOM.downPayment.addEventListener('input', UI.updateFinancials);
 UI.DOM.discount.addEventListener('input', UI.updateFinancials);
 
+// <-- LISTENER 'input' no clientName REMOVIDO -->
+
 UI.DOM.clientPhone.addEventListener('input', (e) => {
-  e.target.value = UI.formatPhoneNumber(e.target.value);
+ e.target.value = UI.formatPhoneNumber(e.target.value);
 });
 
 UI.DOM.partsContainer.addEventListener('click', (e) => { 
@@ -878,3 +912,4 @@ document.addEventListener('keydown', (event) => {
         }
     }
 });
+
