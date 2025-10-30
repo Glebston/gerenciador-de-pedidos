@@ -493,8 +493,24 @@ export const renderOrders = (allOrders, currentOrdersView) => {
         });
     } else { 
         ordersToRender = allOrders.filter(o => o.orderStatus === 'Entregue');
+        
+        // ==========================================================
+        // INÍCIO DA CORREÇÃO v4.2.4
+        // ==========================================================
+        
         // Ordena por data (mais novos primeiro)
-        ordersToRender.sort((a, b) => (b.deliveryDate || 0).localeCompare(a.deliveryDate || 0));
+        ordersToRender.sort((a, b) => {
+            // Usamos '0000-01-01' como fallback para garantir que sejam strings
+            // e que datas ausentes sejam tratadas como as mais antigas.
+            const dateA = a.deliveryDate || '0000-01-01';
+            const dateB = b.deliveryDate || '0000-01-01';
+            // dateB.localeCompare(dateA) ordena em ordem decrescente (mais novo primeiro)
+            return dateB.localeCompare(dateA);
+        });
+        
+        // ==========================================================
+        // FIM DA CORREÇÃO v4.2.4
+        // ==========================================================
     }
 
     if (ordersToRender.length === 0) {
