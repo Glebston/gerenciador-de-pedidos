@@ -72,6 +72,13 @@ export const DOM = {
     contasAReceber: document.getElementById('contasAReceber'),
     lucroLiquido: document.getElementById('lucroLiquido'),
     saldoEmConta: document.getElementById('saldoEmConta'),
+    // ==========================================================
+    // INÍCIO DA CORREÇÃO v4.2.5: Adiciona o novo ID do card de caixa
+    // ==========================================================
+    saldoEmCaixa: document.getElementById('saldoEmCaixa'),
+    // ==========================================================
+    // FIM DA CORREÇÃO v4.2.5
+    // ==========================================================
     adjustBalanceBtn: document.getElementById('adjustBalanceBtn'),
     initialBalanceModal: document.getElementById('initialBalanceModal'),
     initialBalanceInput: document.getElementById('initialBalanceInput'),
@@ -788,7 +795,12 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
         return true;
     });
 
-    let faturamentoBruto = 0, despesasTotais = 0, contasAReceber = 0, valorRecebido = 0, bankFlow = 0;
+    // ==========================================================
+    // INÍCIO DA CORREÇÃO v4.2.5: Separação de bankFlow e cashFlow
+    // ==========================================================
+    let faturamentoBruto = 0, despesasTotais = 0, contasAReceber = 0, valorRecebido = 0;
+    let bankFlow = 0; // Fluxo do Banco
+    let cashFlow = 0; // Fluxo do Caixa (Dinheiro em Mãos)
 
     filteredTransactions.forEach(t => {
         const amount = parseFloat(t.amount) || 0;
@@ -803,7 +815,14 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
             despesasTotais += amount;
         }
         
-        if (t.source === 'banco' || t.source === undefined) {
+        // Separa o fluxo de caixa (caixa) do fluxo de banco (banco ou indefinido)
+        if (t.source === 'caixa') {
+            if (t.type === 'income' && t.status !== 'a_receber') {
+                cashFlow += amount;
+            } else if (t.type === 'expense') {
+                cashFlow -= amount;
+            }
+        } else { // 'banco' ou undefined (legado)
             if (t.type === 'income' && t.status !== 'a_receber') {
                 bankFlow += amount;
             } else if (t.type === 'expense') {
@@ -813,13 +832,21 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
     });
 
     const lucroLiquido = valorRecebido - despesasTotais;
+    // Saldo em Conta (Banco) = Saldo Inicial + Fluxo do Banco
     const saldoEmConta = (userBankBalanceConfig.initialBalance || 0) + bankFlow;
+    // Saldo em Caixa (Mãos) = Apenas o Fluxo do Caixa (não usa saldo inicial)
+    const saldoEmCaixa = cashFlow;
 
     DOM.faturamentoBruto.textContent = `R$ ${faturamentoBruto.toFixed(2)}`;
     DOM.despesasTotais.textContent = `R$ ${despesasTotais.toFixed(2)}`;
     DOM.contasAReceber.textContent = `R$ ${contasAReceber.toFixed(2)}`;
     DOM.lucroLiquido.textContent = `R$ ${lucroLiquido.toFixed(2)}`;
     DOM.saldoEmConta.textContent = `R$ ${saldoEmConta.toFixed(2)}`;
+    DOM.saldoEmCaixa.textContent = `R$ ${saldoEmCaixa.toFixed(2)}`;
+    
+    // ==========================================================
+    // FIM DA CORREÇÃO v4.2.5
+    // ==========================================================
 
     const expenseCategories = {}, incomeCategories = {};
 
