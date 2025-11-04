@@ -72,13 +72,7 @@ export const DOM = {
     contasAReceber: document.getElementById('contasAReceber'),
     lucroLiquido: document.getElementById('lucroLiquido'),
     saldoEmConta: document.getElementById('saldoEmConta'),
-    // ==========================================================
-    // INÍCIO DA CORREÇÃO v4.2.5: Adiciona o novo ID do card de caixa
-    // ==========================================================
     saldoEmCaixa: document.getElementById('saldoEmCaixa'),
-    // ==========================================================
-    // FIM DA CORREÇÃO v4.2.5
-    // ==========================================================
     adjustBalanceBtn: document.getElementById('adjustBalanceBtn'),
     initialBalanceModal: document.getElementById('initialBalanceModal'),
     initialBalanceInput: document.getElementById('initialBalanceInput'),
@@ -501,23 +495,12 @@ export const renderOrders = (allOrders, currentOrdersView) => {
     } else { 
         ordersToRender = allOrders.filter(o => o.orderStatus === 'Entregue');
         
-        // ==========================================================
-        // INÍCIO DA CORREÇÃO v4.2.4
-        // ==========================================================
-        
-        // Ordena por data (mais novos primeiro)
+        // v4.2.4: Ordena por data (mais novos primeiro)
         ordersToRender.sort((a, b) => {
-            // Usamos '0000-01-01' como fallback para garantir que sejam strings
-            // e que datas ausentes sejam tratadas como as mais antigas.
             const dateA = a.deliveryDate || '0000-01-01';
             const dateB = b.deliveryDate || '0000-01-01';
-            // dateB.localeCompare(dateA) ordena em ordem decrescente (mais novo primeiro)
             return dateB.localeCompare(dateA);
         });
-        
-        // ==========================================================
-        // FIM DA CORREÇÃO v4.2.4
-        // ==========================================================
     }
 
     if (ordersToRender.length === 0) {
@@ -795,9 +778,7 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
         return true;
     });
 
-    // ==========================================================
-    // INÍCIO DA CORREÇÃO v4.2.5: Separação de bankFlow e cashFlow
-    // ==========================================================
+    // v4.2.5: Separação de bankFlow e cashFlow
     let faturamentoBruto = 0, despesasTotais = 0, contasAReceber = 0, valorRecebido = 0;
     let bankFlow = 0; // Fluxo do Banco
     let cashFlow = 0; // Fluxo do Caixa (Dinheiro em Mãos)
@@ -844,10 +825,6 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
     DOM.saldoEmConta.textContent = `R$ ${saldoEmConta.toFixed(2)}`;
     DOM.saldoEmCaixa.textContent = `R$ ${saldoEmCaixa.toFixed(2)}`;
     
-    // ==========================================================
-    // FIM DA CORREÇÃO v4.2.5
-    // ==========================================================
-
     const expenseCategories = {}, incomeCategories = {};
 
     filteredTransactions.forEach(t => {
@@ -1081,7 +1058,23 @@ const createFinancialRow = (partId, name, quantity, priceGroup) => {
 };
 
 export const renderFinancialSection = () => {
+    // ==========================================================
+    // INÍCIO DA CORREÇÃO v4.2.6: Preservar preços unitários ao mudar quantidade
+    // ==========================================================
+    
+    // 1. Salva os preços unitários existentes antes de limpar o DOM
+    const existingPrices = new Map();
+    DOM.financialsContainer.querySelectorAll('.financial-item').forEach(item => {
+        const partId = item.dataset.partId;
+        const priceGroup = item.dataset.priceGroup;
+        const price = item.querySelector('.financial-price').value;
+        if (price) { // Salva apenas se houver um valor
+            existingPrices.set(`${partId}-${priceGroup}`, price);
+        }
+    });
+
     DOM.financialsContainer.innerHTML = '';
+    
     DOM.partsContainer.querySelectorAll('.part-item').forEach(partItem => {
         const partId = partItem.dataset.partId;
         const partName = partItem.querySelector('.part-type').value || `Peça ${partId}`;
@@ -1096,21 +1089,42 @@ export const renderFinancialSection = () => {
 
             if (standardQty > 0) {
                 const finRow = createFinancialRow(partId, partName, standardQty, 'standard');
+                // 2. Reaplica o preço salvo, se existir
+                const key = `${partId}-standard`;
+                if (existingPrices.has(key)) {
+                    finRow.querySelector('.financial-price').value = existingPrices.get(key);
+                }
                 DOM.financialsContainer.appendChild(finRow);
             }
             if (specificQty > 0) {
                 const finRow = createFinancialRow(partId, partName, specificQty, 'specific');
+                // 2. Reaplica o preço salvo, se existir
+                const key = `${partId}-specific`;
+                if (existingPrices.has(key)) {
+                    finRow.querySelector('.financial-price').value = existingPrices.get(key);
+                }
                 DOM.financialsContainer.appendChild(finRow);
             }
-        } else {
+        } else { // 'detalhado'
             const totalQty = partItem.querySelectorAll('.detailed-item-row').length;
             if (totalQty > 0) {
                 const finRow = createFinancialRow(partId, partName, totalQty, 'detailed');
+                // 2. Reaplica o preço salvo, se existir
+                const key = `${partId}-detailed`;
+                if (existingPrices.has(key)) {
+                    finRow.querySelector('.financial-price').value = existingPrices.get(key);
+                }
                 DOM.financialsContainer.appendChild(finRow);
             }
         }
     });
+    
+    // 3. Recalcula o total (que já era chamado)
     updateFinancials();
+    
+    // ==========================================================
+    // FIM DA CORREÇÃO v4.2.6
+    // ==========================================================
 };
 
 const addContentToPart = (partItem, partData = {}) => {
