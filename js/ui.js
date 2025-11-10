@@ -126,6 +126,22 @@ export const DOM = {
     generalObservation: document.getElementById('generalObservation'),
     existingFilesContainer: document.getElementById('existingFilesContainer'),
     modalTitle: document.getElementById('modalTitle'),
+    
+    // Novos campos da "Ponte" (v5.0)
+    downPaymentDate: document.getElementById('downPaymentDate'),
+    downPaymentSourceContainer: document.getElementById('downPaymentSourceContainer'),
+    downPaymentStatusContainer: document.getElementById('downPaymentStatusContainer'),
+    downPaymentStatusPago: document.querySelector('input[name="downPaymentStatus"][value="pago"]'),
+    downPaymentStatusAReceber: document.querySelector('input[name="downPaymentStatus"][value="a_receber"]'),
+
+    // v4.2.7: Modal de Quitação
+    settlementModal: document.getElementById('settlementModal'),
+    settlementOrderId: document.getElementById('settlementOrderId'),
+    settlementAmountDisplay: document.getElementById('settlementAmountDisplay'),
+    settlementDate: document.getElementById('settlementDate'),
+    settlementSourceContainer: document.getElementById('settlementSourceContainer'),
+    settlementCancelBtn: document.getElementById('settlementCancelBtn'),
+    settlementConfirmBtn: document.getElementById('settlementConfirmBtn'),
 };
 
 // Funções de Modais
@@ -181,6 +197,64 @@ export const showConfirmModal = (message, okText = "OK", cancelText = "Cancelar"
         DOM.confirmCancelBtn.addEventListener('click', cancelListener, { once: true });
     });
 };
+
+// v4.2.7: Novo Modal de Quitação
+export const showSettlementModal = (orderId, amount) => {
+    return new Promise((resolve) => {
+        DOM.settlementOrderId.value = orderId;
+        DOM.settlementAmountDisplay.textContent = `R$ ${amount.toFixed(2)}`;
+        DOM.settlementDate.value = new Date().toISOString().split('T')[0];
+        
+        // Define 'banco' como padrão ao abrir
+        updateSourceSelectionUI(DOM.settlementSourceContainer, 'banco');
+
+        DOM.settlementModal.classList.remove('hidden');
+        DOM.settlementDate.focus(); // Foco na data
+
+        const handleConfirm = () => {
+            const selectedSourceEl = DOM.settlementSourceContainer.querySelector('.source-selector.active');
+            if (!selectedSourceEl) {
+                // Feedback sutil se nenhuma origem for selecionada
+                const container = DOM.settlementSourceContainer;
+                container.classList.add('ring-2', 'ring-red-500', 'rounded-md');
+                setTimeout(() => container.classList.remove('ring-2', 'ring-red-500', 'rounded-md'), 1000);
+                return;
+            }
+            
+            const data = {
+                date: DOM.settlementDate.value,
+                source: selectedSourceEl.dataset.source
+            };
+            cleanupAndResolve(data);
+        };
+
+        const handleCancel = () => {
+            cleanupAndResolve(null);
+        };
+        
+        // v4.2.7: Listener de clique interno para os seletores de origem do modal
+        const handleSourceClick = (e) => {
+             const target = e.target.closest('.source-selector');
+             if (target) {
+                updateSourceSelectionUI(DOM.settlementSourceContainer, target.dataset.source);
+             }
+        };
+
+        const cleanupAndResolve = (value) => {
+            DOM.settlementModal.classList.add('hidden');
+            DOM.settlementConfirmBtn.removeEventListener('click', handleConfirm);
+            DOM.settlementCancelBtn.removeEventListener('click', handleCancel);
+            DOM.settlementSourceContainer.removeEventListener('click', handleSourceClick); // Limpa o listener de origem
+            resolve(value);
+        };
+
+        // Adiciona listeners
+        DOM.settlementConfirmBtn.addEventListener('click', handleConfirm, { once: false }); // 'once: false' por causa da validação
+        DOM.settlementCancelBtn.addEventListener('click', handleCancel, { once: true });
+        DOM.settlementSourceContainer.addEventListener('click', handleSourceClick);
+    });
+};
+// Fim v4.2.7
 
 // Funções de UI Geral
 export const updateNavButton = (currentDashboardView) => {
@@ -585,6 +659,11 @@ export const viewOrder = (order) => {
     const discount = order.discount || 0;
     const grandTotal = subTotal - discount;
     const remaining = grandTotal - (order.downPayment || 0);
+    
+    // v5.0: Adiciona detalhes do adiantamento
+    const paymentFinSourceText = order.paymentFinSource === 'caixa' ? 'Caixa' : (order.paymentFinSource === 'banco' ? 'Banco' : 'N/A');
+    const paymentFinStatusText = order.paymentFinStatus === 'a_receber' ? 'A Receber' : 'Recebido';
+    const downPaymentDateText = order.downPaymentDate ? new Date(order.downPaymentDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A';
 
     const modalContent = `
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
@@ -603,16 +682,21 @@ export const viewOrder = (order) => {
                 </table>
                 <h3 class="font-bold text-lg mt-4">Observação Geral</h3>
                 <p class="text-sm p-2 border rounded-md mt-2 min-h-[40px]">${order.generalObservation || 'Nenhuma.'}</p>
+                
                 <h3 class="font-bold text-lg mt-4">Financeiro</h3>
                 <div class="grid grid-cols-2 gap-x-8 mt-2 border-t pt-4 text-sm">
                     <div><strong>Valor Bruto:</strong> R$ ${subTotal.toFixed(2)}</div>
-                    <div><strong>Valor Pago:</strong> R$ ${(order.downPayment || 0).toFixed(2)}</div>
                     <div><strong>Desconto:</strong> R$ ${discount.toFixed(2)}</div>
+                    <div class="font-bold text-blue-600 text-lg"><strong>Valor Final:</strong> R$ ${grandTotal.toFixed(2)}</div>
+                    <div class="font-bold text-red-600 text-lg"><strong>Resta Pagar:</strong> R$ ${remaining.toFixed(2)}</div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-x-8 mt-2 border-t pt-4 text-sm">
+                    <div><strong>Valor Pago (Adiant.):</strong> R$ ${(order.downPayment || 0).toFixed(2)}</div>
                     <div><strong>Forma de Pagamento:</strong> ${order.paymentMethod || 'N/A'}</div>
-                    <div class="mt-2 col-span-2 grid grid-cols-2 gap-x-8">
-                        <div class="font-bold text-blue-600 text-lg"><strong>Valor Final:</strong> R$ ${grandTotal.toFixed(2)}</div>
-                        <div class="font-bold text-red-600 text-lg"><strong>Resta Pagar:</strong> R$ ${remaining.toFixed(2)}</div>
-                    </div>
+                    <div><strong>Data do Pagamento:</strong> ${downPaymentDateText}</div>
+                    <div><strong>Status do Pagamento:</strong> ${paymentFinStatusText}</div>
+                    <div><strong>Origem do Pagamento:</strong> ${paymentFinSourceText}</div>
                 </div>
                 
                 <div id="mockupContainerView" class="pt-4 border-t mt-4">
@@ -650,13 +734,21 @@ const generateTransactionRowHTML = (t) => {
     
     const statusBadge = isReceivable ? `<span class="ml-2 text-xs font-semibold py-1 px-2 rounded-full bg-yellow-100 text-yellow-800">A Receber</span>` : '';
     const sourceBadge = `<span class="text-xs font-semibold py-1 px-2 rounded-full ${t.source === 'caixa' ? 'bg-gray-200 text-gray-800' : 'bg-indigo-100 text-indigo-800'}">${t.source === 'caixa' ? 'Caixa' : 'Banco'}</span>`;
+    
+    // v5.0: Oculta botões de edição/exclusão se a transação estiver vinculada a um pedido
+    const isLinkedToOrder = !!t.orderId;
+    let actionsHtml = '';
 
-    let actionsHtml = `
-        <button data-id="${t.id}" class="edit-transaction-btn text-blue-500 hover:underline text-sm">Editar</button>
-        <button data-id="${t.id}" class="delete-transaction-btn text-red-500 hover:underline text-sm ml-2">Excluir</button>
-    `;
+    if (isLinkedToOrder) {
+        actionsHtml = `<span class="text-xs text-gray-500 italic" title="Vinculado ao Pedido ID: ${t.orderId}">Lançado via Pedido</span>`;
+    } else {
+        actionsHtml = `
+            <button data-id="${t.id}" class="edit-transaction-btn text-blue-500 hover:underline text-sm">Editar</button>
+            <button data-id="${t.id}" class="delete-transaction-btn text-red-500 hover:underline text-sm ml-2">Excluir</button>
+        `;
+    }
 
-    if (isReceivable) {
+    if (isReceivable && !isLinkedToOrder) { // Só permite "Receber" se for manual e "A Receber"
         actionsHtml = `<button data-id="${t.id}" class="mark-as-paid-btn text-green-600 hover:underline text-sm font-semibold">Receber</button> ` + actionsHtml;
     }
 
@@ -1250,6 +1342,12 @@ export const resetForm = () => {
     DOM.financialsContainer.innerHTML = '';
     DOM.existingFilesContainer.innerHTML = '';
     DOM.orderDate.value = new Date().toISOString().split('T')[0];
+    
+    // v5.0: Define padrões para os novos campos da "Ponte"
+    DOM.downPaymentDate.value = new Date().toISOString().split('T')[0];
+    DOM.downPaymentStatusPago.checked = true;
+    updateSourceSelectionUI(DOM.downPaymentSourceContainer, 'banco');
+    
     updateFinancials();
 };
 
@@ -1267,6 +1365,13 @@ export const populateFormForEdit = (orderData, currentPartCounter) => {
     DOM.downPayment.value = orderData.downPayment || '';
     DOM.discount.value = orderData.discount || '';
     DOM.paymentMethod.value = orderData.paymentMethod || '';
+    
+    // v5.0: Popula os novos campos da "Ponte"
+    DOM.downPaymentDate.value = orderData.downPaymentDate || new Date().toISOString().split('T')[0];
+    const finStatus = orderData.paymentFinStatus || 'pago';
+    (finStatus === 'a_receber' ? DOM.downPaymentStatusAReceber : DOM.downPaymentStatusPago).checked = true;
+    updateSourceSelectionUI(DOM.downPaymentSourceContainer, orderData.paymentFinSource || 'banco');
+
 
     DOM.existingFilesContainer.innerHTML = '';
     if (orderData.mockupUrls && orderData.mockupUrls.length) {
@@ -1318,11 +1423,17 @@ export const populateFormForEdit = (orderData, currentPartCounter) => {
 };
 
 // ==========================================================
-// OUTRAS FUNÇÕES DE UI (Sem alteração)
+// OUTRAS FUNÇÕES DE UI
 // ==========================================================
 
-export const updateSourceSelectionUI = (selectedSource) => {
-    DOM.transactionSourceContainer.querySelectorAll('.source-selector').forEach(btn => {
+/**
+ * Atualiza a UI dos seletores de origem (Banco/Caixa)
+ * @param {HTMLElement} container - O elemento container (ex: DOM.transactionSourceContainer)
+ * @param {string} selectedSource - 'banco' ou 'caixa'
+ */
+export const updateSourceSelectionUI = (container, selectedSource) => {
+    if (!container) return;
+    container.querySelectorAll('.source-selector').forEach(btn => {
         const isSelected = btn.dataset.source === selectedSource;
         btn.classList.toggle('active', isSelected);
         const iconPlaceholder = btn.querySelector('.icon-placeholder');
