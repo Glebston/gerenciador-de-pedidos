@@ -516,16 +516,31 @@
             <div class="col-span-1 flex justify-center"><button type="button" class="remove-specific-row-btn text-red-500 font-bold">&times;</button></div>
         </div>
     </template>
+    
     <template id="detalhadoPartContentTemplate">
-        <div class="detailed-items-list space-y-2 mt-3">
-            <div class="grid grid-cols-12 gap-2 font-semibold text-sm px-1">
-                <div class="col-span-5">Nome</div>
-                <div class="col-span-4">Tamanho</div>
-                <div class="col-span-2">Número</div>
-                <div class="col-span-1"></div>
+        <div class="detailed-sizes-grid-container p-3 border rounded-md bg-white mb-4">
+            <h4 class="font-semibold mb-2 text-gray-700">1. Preencha as Quantidades</h4>
+            </div>
+
+        <button type="button" class="generate-detailed-lines-btn mt-2 w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+            2. Gerar Linhas para Detalhamento
+        </button>
+        
+        <div class="detailed-list-wrapper hidden mt-4 border-t pt-4">
+            <div class="flex justify-between items-center mb-2">
+                 <h4 class="font-semibold text-gray-700">3. Preencha os Nomes/Números</h4>
+                 <button type="button" class="add-manual-detailed-row-btn bg-gray-200 text-gray-800 text-sm py-1 px-3 rounded-lg hover:bg-gray-300">+ Linha Manual</button>
+            </div>
+           
+            <div class="detailed-items-list space-y-2 mt-3">
+                <div class="grid grid-cols-12 gap-2 font-semibold text-sm px-1">
+                    <div class="col-span-5">Nome</div>
+                    <div class="col-span-4">Tamanho</div>
+                    <div class="col-span-2">Número</div>
+                    <div class="col-span-1"></div>
+                </div>
             </div>
         </div>
-        <button type="button" class="add-detailed-row-btn mt-2 bg-gray-200 text-gray-800 text-sm py-1 px-3 rounded-lg hover:bg-gray-300">+ Adicionar Linha</button>
     </template>
     <template id="financialRowTemplate">
         <div class="financial-item grid grid-cols-4 gap-4 items-end">
