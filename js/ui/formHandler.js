@@ -1,5 +1,5 @@
 // ==========================================================
-// MÓDULO FORM HANDLER (v4.3.0)
+// MÓDULO FORM HANDLER (v4.5.0-b)
 // Responsabilidade: Gerenciar toda a lógica interna do
 // modal de Pedidos (adicionar peças, calcular totais,
 // popular para edição, resetar).
@@ -172,28 +172,117 @@ const addContentToPart = (partItem, partData = {}) => {
         contentContainer.appendChild(comumTpl);
 
     } else { // 'detalhado'
+        // ==========================================================
+        // INÍCIO DA ALTERAÇÃO v4.5.0-b
+        // ==========================================================
         const detalhadoTpl = document.getElementById('detalhadoPartContentTemplate').content.cloneNode(true);
         const listContainer = detalhadoTpl.querySelector('.detailed-items-list');
-        const addRow = (detail = {}) => {
+        const gridContainer = detalhadoTpl.querySelector('.detailed-sizes-grid-container');
+        
+        // --- 1. Helper `addRow` modificado ---
+        // Agora aceita um tamanho pré-preenchido e o torna readonly
+        const addRow = (detail = {}, prefilledSize = null) => {
             const row = document.createElement('div');
             row.className = 'grid grid-cols-12 gap-2 items-center detailed-item-row';
+            
+            const sizeValue = prefilledSize || detail.size || '';
+            const isReadonly = prefilledSize ? 'readonly' : '';
+
             row.innerHTML = `
                 <div class="col-span-5"><input type="text" placeholder="Nome na Peça" class="p-1 border rounded-md w-full text-sm item-det-name" value="${detail.name || ''}"></div>
-                <div class="col-span-4"><input type="text" placeholder="Tamanho" class="p-1 border rounded-md w-full text-sm item-det-size" value="${detail.size || ''}"></div>
+                <div class="col-span-4"><input type="text" placeholder="Tamanho" class="p-1 border rounded-md w-full text-sm item-det-size" value="${sizeValue}" ${isReadonly}></div>
                 <div class="col-span-2"><input type="text" placeholder="Nº" class="p-1 border rounded-md w-full text-sm item-det-number" value="${detail.number || ''}"></div>
-                <div class="col-span-1 flex justify-center"><button type="button" class="remove-detailed-row text-red-500 font-bold">&times;</button></div>`;
+                <div classcol-span-1 flex justify-center"><button type="button" class="remove-detailed-row text-red-500 font-bold">&times;</button></div>`;
+            
             row.querySelector('.remove-detailed-row').addEventListener('click', () => {
                 row.remove();
                 renderFinancialSection();
             });
             listContainer.appendChild(row);
         };
-        (partData.details || [{}]).forEach(addRow);
-        detalhadoTpl.querySelector('.add-detailed-row-btn').addEventListener('click', () => {
-            addRow();
+
+        // --- 2. Construção da Grade de Tamanhos ---
+        // Reutiliza a mesma estrutura de categorias do modo 'comum'
+        const categories = {
+            'Baby Look': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
+            'Normal': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
+            'Infantil': ['2 anos', '4 anos', '6 anos', '8 anos', '10 anos', '12 anos']
+        };
+        let gridHtml = '<div class="space-y-4">';
+        for (const category in categories) {
+            gridHtml += `<div class=""><h4 class="font-semibold mb-2">${category}</h4><div class="grid grid-cols-3 sm:grid-cols-6 gap-4 justify-start">`;
+            categories[category].forEach(size => {
+                // Nota: Usamos 'detailed-size-input' para diferenciar dos inputs do modo 'comum'
+                gridHtml += `
+                    <div class="size-input-container">
+                        <label class="text-sm font-medium mb-1">${size}</label>
+                        <input type="number" data-category="${category}" data-size="${size}" class="p-2 border rounded-md w-full text-center detailed-size-input">
+                    </div>`;
+            });
+            gridHtml += '</div></div>';
+        }
+        gridHtml += '</div>';
+        gridContainer.innerHTML += gridHtml; // Adiciona a grade ao container
+        
+        // --- 3. Lógica de Edição vs. Novo ---
+        // Se estamos editando (partData.details existe e tem itens), mostramos a lista e escondemos a grade.
+        if (partData.details && partData.details.length > 0) {
+            partData.details.forEach(detail => addRow(detail, null)); // Popula com dados existentes
+            
+            // Esconde a UI de geração
+            gridContainer.classList.add('hidden');
+            detalhadoTpl.querySelector('.generate-detailed-lines-btn').classList.add('hidden');
+            
+            // Mostra a lista
+            detalhadoTpl.querySelector('.detailed-list-wrapper').classList.remove('hidden');
+            
+        } else {
+            // Se for novo, a grade já está visível por padrão (HTML) e a lista escondida.
+            // Não precisamos fazer nada.
+        }
+
+        // --- 4. Listeners dos Botões ---
+        
+        // Listener para o botão "Gerar Linhas"
+        detalhadoTpl.querySelector('.generate-detailed-lines-btn').addEventListener('click', (e) => {
+            const partItem = e.target.closest('.part-item'); // Encontra o 'part-item' pai
+            if (!partItem) return;
+
+            // Limpa a lista (exceto o header) antes de adicionar novas linhas
+            listContainer.querySelectorAll('.detailed-item-row').forEach(row => row.remove());
+
+            partItem.querySelectorAll('.detailed-size-input').forEach(input => {
+                const quantity = parseInt(input.value) || 0;
+                if (quantity > 0) {
+                    const { category, size } = input.dataset;
+                    const prefilledSize = `${size} (${category})`; // Ex: "M (Baby Look)"
+                    
+                    for (let i = 0; i < quantity; i++) {
+                        addRow({}, prefilledSize); // Adiciona a linha com o tamanho pré-preenchido
+                    }
+                }
+            });
+
+            renderFinancialSection(); // Atualiza o financeiro
+            
+            // Esconde a UI de geração
+            partItem.querySelector('.detailed-sizes-grid-container').classList.add('hidden');
+            e.target.classList.add('hidden'); // Esconde o próprio botão
+            
+            // Mostra a lista de itens
+            partItem.querySelector('.detailed-list-wrapper').classList.remove('hidden');
+        });
+
+        // Listener para o botão "+ Linha Manual" (que está dentro da lista)
+        detalhadoTpl.querySelector('.add-manual-detailed-row-btn').addEventListener('click', () => {
+            addRow({}, null); // Adiciona uma linha manual (sem pré-preenchimento)
             renderFinancialSection();
         });
+        
         contentContainer.appendChild(detalhadoTpl);
+        // ==========================================================
+        // FIM DA ALTERAÇÃO v4.5.0-b
+        // ==========================================================
     }
 };
 
