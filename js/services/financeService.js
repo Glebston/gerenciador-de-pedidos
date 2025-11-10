@@ -1,5 +1,5 @@
 // Importa as funções necessárias do Firestore
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, writeBatch, getDocs, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Importa a instância 'db' do nosso arquivo de configuração
 import { db } from '../firebaseConfig.js';
@@ -125,6 +125,71 @@ export const saveInitialBalance = async (newBalance) => {
             initialBalance: newBalance
         }
     });
+};
+
+/**
+ * Busca a primeira transação de adiantamento vinculada a um ID de pedido.
+ * @param {string} orderId - O ID do pedido.
+ * @returns {object|null} O documento da transação (com id) ou null se não encontrar.
+ */
+export const getTransactionByOrderId = async (orderId) => {
+    if (!transactionsCollection) return null;
+
+    // Cria uma query para buscar transações onde o campo 'orderId' é igual ao fornecido
+    // e o campo 'category' é 'Adiantamento de Pedido' (para garantir que seja a transação correta)
+    const q = query(
+        transactionsCollection, 
+        where("orderId", "==", orderId),
+        where("category", "==", "Adiantamento de Pedido")
+    );
+
+    try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            // Retorna o primeiro documento encontrado (deve haver apenas um)
+            const doc = querySnapshot.docs[0];
+            return { id: doc.id, ...doc.data() };
+        }
+        return null;
+    } catch (error) {
+        console.error("Erro ao buscar transação por orderId:", error);
+        return null;
+    }
+};
+
+/**
+ * Exclui TODAS as transações financeiras vinculadas a um ID de pedido.
+ * @param {string} orderId - O ID do pedido.
+ */
+export const deleteAllTransactionsByOrderId = async (orderId) => {
+    if (!transactionsCollection || !orderId) return;
+
+    // 1. Encontra todas as transações (Adiantamento, Quitação, etc.)
+    const q = query(
+        transactionsCollection, 
+        where("orderId", "==", orderId)
+    );
+
+    try {
+        const querySnapshot = await getDocs(q);
+        if (querySnapshot.empty) {
+            return; // Nenhuma transação para excluir.
+        }
+
+        // 2. Cria um batch para excluir todas de uma vez
+        const batch = writeBatch(db);
+        querySnapshot.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+
+        // 3. Executa a exclusão
+        await batch.commit();
+
+    } catch (error) {
+        console.error("Erro ao excluir transações por orderId:", error);
+        // Propaga o erro para o main.js tratar, se necessário
+        throw new Error("Falha ao excluir finanças vinculadas.");
+    }
 };
 
 /**
