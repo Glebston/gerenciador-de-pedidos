@@ -94,7 +94,7 @@ const initializeAppLogic = async (user) => {
         initializeIdleTimer(UI.DOM, handleLogout);
         initializeAndPopulateDatalists(); 
         checkBackupReminder();
-        triggerAutoBackupIfNeeded();
+        // triggerAutoBackupIfNeeded(); // v5.7.1: REMOVIDO - Esta função era redundante e causava o modal "Não há dados" no login.
         UI.updateNavButton(currentDashboardView);
         
         UI.DOM.authContainer.classList.add('hidden');
@@ -310,6 +310,8 @@ const handleRestore = (event) => {
     event.target.value = '';
 };
 
+// v5.7.1: Esta função é redundante e foi removida do fluxo de inicialização.
+// Ela causava um modal de "Não há dados" no login.
 const triggerAutoBackupIfNeeded = () => {
     const key = `lastAutoBackupTimestamp_${userCompanyId}`;
     const lastBackup = localStorage.getItem(key);
