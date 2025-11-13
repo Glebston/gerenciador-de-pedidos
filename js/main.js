@@ -84,7 +84,8 @@ const initializeAppLogic = async (user) => {
         // --- INICIALIZAÇÃO REATIVA (PÓS-REATORAÇÃO) ---
         initializeOrderService(userCompanyId, handleOrderChange, () => currentOrdersView);
         initializeFinanceService(userCompanyId, handleFinanceChange, () => userBankBalanceConfig);
-        initializePricingService(userId, handlePricingChange);
+        // v5.7.1: Corrigido o erro de referência de userId para userCompanyId
+        initializePricingService(userCompanyId, handlePricingChange); 
         
         // --- RENDERIZAÇÃO INICIAL ---
         UI.renderOrders(getAllOrders(), currentOrdersView);
