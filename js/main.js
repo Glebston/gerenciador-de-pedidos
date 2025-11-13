@@ -84,7 +84,7 @@ const initializeAppLogic = async (user) => {
         // --- INICIALIZAÇÃO REATIVA (PÓS-REATORAÇÃO) ---
         initializeOrderService(userCompanyId, handleOrderChange, () => currentOrdersView);
         initializeFinanceService(userCompanyId, handleFinanceChange, () => userBankBalanceConfig);
-        initializePricingService(userCompanyId, handlePricingChange);
+        initializePricingService(userId, handlePricingChange);
         
         // --- RENDERIZAÇÃO INICIAL ---
         UI.renderOrders(getAllOrders(), currentOrdersView);
@@ -313,6 +313,7 @@ const handleRestore = (event) => {
 // v5.7.1: Esta função é redundante e foi removida do fluxo de inicialização.
 // Ela causava um modal de "Não há dados" no login.
 const triggerAutoBackupIfNeeded = () => {
+    // ... (código permanece, mas não é chamado)
     const key = `lastAutoBackupTimestamp_${userCompanyId}`;
     const lastBackup = localStorage.getItem(key);
     if (!lastBackup) return;
@@ -326,9 +327,21 @@ const triggerAutoBackupIfNeeded = () => {
 const checkBackupReminder = () => {
     const key = `lastAutoBackupTimestamp_${userCompanyId}`;
     const lastBackup = localStorage.getItem(key);
-    if (!lastBackup) return;
     const sevenDaysInMillis = 7 * 24 * 60 * 60 * 1000;
-    if ((Date.now() - parseInt(lastBackup)) > sevenDaysInMillis) {
+
+    let needsReminder = false;
+    
+    if (!lastBackup) {
+        // Caso 1: Nunca fez backup
+        needsReminder = true;
+    } else {
+        // Caso 2: O backup está antigo
+        if ((Date.now() - parseInt(lastBackup)) > sevenDaysInMillis) {
+            needsReminder = true;
+        }
+    }
+
+    if (needsReminder) {
         UI.DOM.backupReminderBanner.classList.remove('hidden');
     }
 };
