@@ -22,21 +22,23 @@ const generateTransactionRowHTML = (t) => {
     const statusBadge = isReceivable ? `<span class="ml-2 text-xs font-semibold py-1 px-2 rounded-full bg-yellow-100 text-yellow-800">A Receber</span>` : '';
     const sourceBadge = `<span class="text-xs font-semibold py-1 px-2 rounded-full ${t.source === 'caixa' ? 'bg-gray-200 text-gray-800' : 'bg-indigo-100 text-indigo-800'}">${t.source === 'caixa' ? 'Caixa' : 'Banco'}</span>`;
     
-    // v5.0: Oculta botões de edição/exclusão se a transação estiver vinculada a um pedido
     const isLinkedToOrder = !!t.orderId;
     let actionsHtml = '';
 
-    if (isLinkedToOrder) {
-        actionsHtml = `<span class="text-xs text-gray-500 italic" title="Vinculado ao Pedido ID: ${t.orderId}">Lançado via Pedido</span>`;
-    } else {
-        actionsHtml = `
-            <button data-id="${t.id}" class="edit-transaction-btn text-blue-500 hover:underline text-sm">Editar</button>
-            <button data-id="${t.id}" class="delete-transaction-btn text-red-500 hover:underline text-sm ml-2">Excluir</button>
-        `;
+    // v5.7.1: Permite "Receber" em qualquer transação "A Receber" (removido check !isLinkedToOrder)
+    if (isReceivable) { 
+        actionsHtml = `<button data-id="${t.id}" class="mark-as-paid-btn text-green-600 hover:underline text-sm font-semibold">Receber</button> `;
     }
 
-    if (isReceivable && !isLinkedToOrder) { // Só permite "Receber" se for manual e "A Receber"
-        actionsHtml = `<button data-id="${t.id}" class="mark-as-paid-btn text-green-600 hover:underline text-sm font-semibold">Receber</button> ` + actionsHtml;
+    // v5.7.1: Sempre exibe os botões de Editar/Excluir
+    actionsHtml += `
+        <button data-id="${t.id}" class="edit-transaction-btn text-blue-500 hover:underline text-sm">Editar</button>
+        <button data-id="${t.id}" class="delete-transaction-btn text-red-500 hover:underline text-sm ml-2">Excluir</button>
+    `;
+
+    // v5.7.1: Se estiver vinculado ao pedido, apenas adiciona uma tag visual, mas mantém os botões.
+    if (isLinkedToOrder) {
+        actionsHtml += `<span class="block text-xs text-gray-500 italic mt-1" title="Vinculado ao Pedido ID: ${t.orderId}">Lançado via Pedido</span>`;
     }
 
     return `
@@ -158,7 +160,7 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
     });
 
     // v4.2.5: Separação de bankFlow e cashFlow
-    let faturamentoBruto = 0, despesasTotais = 0, contasAReceber = 0, valorRecebido = 0;
+    let faturamentoBruto = 0, despesasTotais = 0, contasARReceber = 0, valorRecebido = 0;
     let bankFlow = 0; // Fluxo do Banco
     let cashFlow = 0; // Fluxo do Caixa (Dinheiro em Mãos)
 
@@ -167,7 +169,7 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
         if (t.type === 'income') {
             faturamentoBruto += amount;
             if (t.status === 'a_receber') {
-                contasAReceber += amount;
+                contasARReceber += amount;
             } else {
                 valorRecebido += amount;
             }
@@ -199,7 +201,7 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
 
     DOM.faturamentoBruto.textContent = `R$ ${faturamentoBruto.toFixed(2)}`;
     DOM.despesasTotais.textContent = `R$ ${despesasTotais.toFixed(2)}`;
-    DOM.contasAReceber.textContent = `R$ ${contasAReceber.toFixed(2)}`;
+    DOM.contasAReceber.textContent = `R$ ${contasARReceber.toFixed(2)}`;
     DOM.lucroLiquido.textContent = `R$ ${lucroLiquido.toFixed(2)}`;
     DOM.saldoEmConta.textContent = `R$ ${saldoEmConta.toFixed(2)}`;
     DOM.saldoEmCaixa.textContent = `R$ ${saldoEmCaixa.toFixed(2)}`;
