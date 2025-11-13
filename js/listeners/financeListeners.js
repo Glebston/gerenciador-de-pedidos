@@ -12,11 +12,14 @@ function handleEditTransaction(id, getTransactions) {
     const transaction = getTransactions().find(t => t.id === id);
     if (!transaction) return;
     
-    // v5.0: Impede a edição de transações vinculadas a pedidos
+    // v5.7.1: Bloco removido. 
+    // A edição agora é permitida mesmo para transações vinculadas a pedidos.
+    /*
     if (transaction.orderId) {
         UI.showInfoModal("Este lançamento foi gerado por um pedido e não pode ser editado manualmente. Por favor, edite o pedido correspondente.");
         return;
     }
+    */
 
     UI.DOM.transactionId.value = transaction.id; 
     UI.DOM.transactionDate.value = transaction.date; 
@@ -113,12 +116,16 @@ export function initializeFinanceListeners(deps) {
         if (btn.classList.contains('edit-transaction-btn')) {
             handleEditTransaction(id, services.getAllTransactions); // Usa a função auxiliar local
         } else if (btn.classList.contains('delete-transaction-btn')) {
-            // v5.0: Impede a exclusão de transações vinculadas
+            
+            // v5.7.1: Bloco removido.
+            // A exclusão agora é permitida mesmo para transações vinculadas a pedidos.
+            /*
             const transaction = services.getAllTransactions().find(t => t.id === id);
             if (transaction && transaction.orderId) {
                 UI.showInfoModal("Este lançamento foi gerado por um pedido e não pode ser excluído manualmente. Por favor, edite o pedido correspondente.");
                 return;
             }
+            */
             
             UI.showConfirmModal("Tem certeza que deseja excluir este lançamento?", "Excluir", "Cancelar")
               .then(ok => ok && services.deleteTransaction(id));
