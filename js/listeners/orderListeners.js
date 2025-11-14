@@ -1,14 +1,17 @@
 // js/listeners/orderListeners.js
 
-import * as UI from '../ui.js';
+// v5.7.22: REMOVIDA importação estática de UI.
+// import * as UI from '../ui.js'; 
 import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf } from '../utils.js';
 
 /**
  * Coleta os dados do formulário do pedido.
  * Esta é uma função auxiliar local para o módulo de listeners de pedido.
  * (Anteriormente em main.js)
+ * v5.7.22: 'UI' agora é injetado nesta função auxiliar.
+ * @param {object} UI - O módulo UI (injetado)
  */
-function collectFormData() {
+function collectFormData(UI) {
     // Coleta a origem (Banco/Caixa) do adiantamento
     const activeSourceEl = UI.DOM.downPaymentSourceContainer.querySelector('.source-selector.active');
     
@@ -49,6 +52,8 @@ function collectFormData() {
 
 /**
  * Inicializa todos os event listeners relacionados a Pedidos.
+ * v5.7.22: A função agora recebe o módulo 'UI' injetado pelo main.js.
+ * @param {object} UI - O módulo UI (injetado)
  * @param {object} deps - Dependências injetadas
  * @param {Function} deps.getState - Getter para o estado (partCounter, etc.)
  * @param {Function} deps.setState - Setter para o estado
@@ -56,7 +61,7 @@ function collectFormData() {
  * @param {object} deps.services - Funções de serviço (saveOrder, getOrderById, etc.)
  * @param {string} deps.userCompanyName - Nome da empresa do usuário
  */
-export function initializeOrderListeners(deps) {
+export function initializeOrderListeners(UI, deps) {
 
     const { getState, setState, getOptionsFromStorage, services, userCompanyName } = deps;
 
@@ -84,7 +89,7 @@ export function initializeOrderListeners(deps) {
             const newUrls = (await Promise.all(uploadPromises)).filter(Boolean);
             
             // --- ETAPA 2: Coletar Dados e Salvar Pedido ---
-            const orderData = collectFormData(); // Usa a função auxiliar local
+            const orderData = collectFormData(UI); // v5.7.22: Injeta UI na função auxiliar
             orderData.mockupUrls.push(...newUrls);
             
             const orderId = UI.DOM.orderId.value;
