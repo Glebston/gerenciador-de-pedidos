@@ -53,9 +53,9 @@ async function main() {
         const UI = await import(`./ui.js${cacheBuster}`);
 
         // Módulos de Listeners
+        // v5.7.22: Todos os listeners agora são carregados dinamicamente
+        // e receberão a 'UI' por injeção.
         const { initializeAuthListeners } = await import(`./listeners/authListeners.js${cacheBuster}`);
-        // v5.7.16: Corrigido o erro de digitação de 'cacheBster' para 'cacheBuster'
-        // v5.7.21: Corrigido o import estático dentro de navigationListeners.js
         const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
@@ -85,7 +85,7 @@ async function main() {
         // ========================================================
         // PARTE 3: LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO
         // ========================================================
-        // (v5.7.16: Lógica de ordenação mantida)
+        // (Sem alterações lógicas nesta seção)
 
         const initializeAppLogic = async (user) => {
             const userMappingRef = doc(db, "user_mappings", user.uid);
@@ -124,8 +124,7 @@ async function main() {
                 UI.DOM.authContainer.classList.add('hidden');
                 UI.DOM.app.classList.remove('hidden');
                 
-                // --- CHAMADAS PÓS-RENDERIZAÇÃO (v5.7.16) ---
-                // O banner deve ser chamado DEPOIS que #app está visível.
+                // --- CHAMADAS PÓS-RENDERIZAÇÃO ---
                 checkBackupReminder();
 
             } else {
@@ -373,26 +372,24 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // NOTA v5.7.21
+                // NOTA v5.7.22
                 // ========================================================
-                // Todas as tentativas anteriores (v5.7.11, v5.7.18, v5.7.19)
-                // de forçar o repaint falharam.
-                // O diagnóstico (v5.7.21) é um conflito de importação de 
-                // módulo (UI estático vs. dinâmico).
-                // A correção está na PARTE 6 (injeção de dependência).
-                // Portanto, o 'setTimeout' original (v5.7.11) é
-                // revertido para garantir a ordem de execução.
+                // O bug v5.7.17 foi diagnosticado como um "Conflito de Módulo".
+                // As correções (v5.7.22) estão na PARTE 6, unificando a 'UI'.
+                // Agora que 'UI' é o mesmo objeto em 'main.js' e nos 
+                // 'listeners', a lógica original de 'setTimeout' 
+                // (v5.7.11) deve funcionar como esperado.
                 setTimeout(() => {
-                    // Esta verificação impede que o banner reapareça se o 
-                    // usuário o dispensou e abriu um modal (o que 
-                    // acionava o bug de repaint v5.7.17)
+                    // Verificação de segurança (v5.7.21) mantida:
+                    // Não mostra o banner se o usuário já o dispensou
+                    // (o que poderia acontecer se a lógica de 'dismiss'
+                    // fosse mais rápida que o timeout).
                     if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
                          UI.DOM.backupReminderBanner.classList.remove('hidden');
                     }
                 }, 100); // 100ms de delay
-                
                 // ========================================================
-                // FIM DA NOTA v5.7.21
+                // FIM DA NOTA v5.7.22
                 // ========================================================
             }
         };
@@ -400,23 +397,21 @@ async function main() {
         // ========================================================
         // PARTE 6: INICIALIZAÇÃO DOS EVENT LISTENERS
         // ========================================================
-        // (v5.7.21: Correção do Conflito de Módulo)
+        // (v5.7.22: Correção do Conflito de Módulo "Unificação")
 
         // Delega a anexação de todos os event listeners para módulos especialistas,
         // injetando as dependências necessárias (handlers, serviços e estado).
-
-        initializeAuthListeners();
-
+        
         // ========================================================
-        // INÍCIO DA CORREÇÃO v5.7.21
+        // INÍCIO DA CORREÇÃO v5.7.22
         // ========================================================
         // O objeto 'UI' (carregado dinamicamente) é agora injetado 
-        // em 'initializeNavigationListeners' para resolver o conflito
-        // de importação estática vs. dinâmica.
+        // em TODOS os módulos de listener para resolver o conflito
+        // de importação estática vs. dinâmica ("cérebro dividido").
+
+        initializeAuthListeners(UI);
+
         initializeNavigationListeners(UI, {
-        // ========================================================
-        // FIM DA CORREÇÃO v5.7.21
-        // ========================================================
             handleBackup,
             handleRestore,
             getOrders: getAllOrders,
@@ -433,7 +428,7 @@ async function main() {
             }
         });
 
-        initializeOrderListeners({
+        initializeOrderListeners(UI, {
             getState: () => ({ partCounter }),
             setState: (newState) => {
                 if (newState.partCounter !== undefined) partCounter = newState.partCounter;
@@ -453,7 +448,7 @@ async function main() {
             userCompanyName: () => userCompanyName 
         });
 
-        initializeFinanceListeners({
+        initializeFinanceListeners(UI, {
             services: {
                 saveTransaction,
                 deleteTransaction,
@@ -469,8 +464,7 @@ async function main() {
             }
         });
 
-        // Corrigido typo (v5.7.19) de 'savePriceTableBtn' para 'savePriceTableChanges'
-        initializeModalAndPricingListeners({
+        initializeModalAndPricingListeners(UI, {
             services: {
                 getAllPricingItems,
                 savePriceTableChanges, 
@@ -482,6 +476,9 @@ async function main() {
             },
             getState: () => ({ currentOptionType })
         });
+        // ========================================================
+        // FIM DA CORREÇÃO v5.7.22
+        // ========================================================
 
     } catch (error) {
         console.error("Falha crítica ao inicializar o PagLucro Gestor:", error);
