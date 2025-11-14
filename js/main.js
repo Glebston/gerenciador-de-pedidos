@@ -55,6 +55,7 @@ async function main() {
         // Módulos de Listeners
         const { initializeAuthListeners } = await import(`./listeners/authListeners.js${cacheBuster}`);
         // v5.7.16: Corrigido o erro de digitação de 'cacheBster' para 'cacheBuster'
+        // v5.7.21: Corrigido o import estático dentro de navigationListeners.js
         const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
@@ -372,27 +373,26 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.19 (Bug de Repaint v5.7.17)
+                // NOTA v5.7.21
                 // ========================================================
-                // DIAGNÓSTICO: As tentativas de 'setTimeout' (v5.7.11) e
-                // 'requestAnimationFrame' (v5.7.18) falharam. Isso prova
-                // que o bug é um problema de "reflow" extremamente teimoso.
+                // Todas as tentativas anteriores (v5.7.11, v5.7.18, v5.7.19)
+                // de forçar o repaint falharam.
+                // O diagnóstico (v5.7.21) é um conflito de importação de 
+                // módulo (UI estático vs. dinâmico).
+                // A correção está na PARTE 6 (injeção de dependência).
+                // Portanto, o 'setTimeout' original (v5.7.11) é
+                // revertido para garantir a ordem de execução.
+                setTimeout(() => {
+                    // Esta verificação impede que o banner reapareça se o 
+                    // usuário o dispensou e abriu um modal (o que 
+                    // acionava o bug de repaint v5.7.17)
+                    if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
+                         UI.DOM.backupReminderBanner.classList.remove('hidden');
+                    }
+                }, 100); // 100ms de delay
                 
-                // SOLUÇÃO: Forçar o "reflow" (re-layout) do navegador.
-                
-                // 1. Removemos a classe. Neste ponto, o DOM é atualizado,
-                //    mas o navegador ainda não "pintou" a mudança.
-                UI.DOM.backupReminderBanner.classList.remove('hidden');
-
-                // 2. Forçamos o navegador a ler uma propriedade de layout
-                //    (como 'offsetWidth'). Isso obriga o navegador a
-                //    "flushar" sua fila de renderização e recalcular o
-                //    layout, "pintando" a mudança (passo 1) no processo.
-                //    A variável '_' é descartada, seu propósito é apenas
-                //    forçar a leitura.
-                const _ = UI.DOM.backupReminderBanner.offsetWidth;
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.19
+                // FIM DA NOTA v5.7.21
                 // ========================================================
             }
         };
@@ -400,14 +400,23 @@ async function main() {
         // ========================================================
         // PARTE 6: INICIALIZAÇÃO DOS EVENT LISTENERS
         // ========================================================
-        // (Sem alterações lógicas nesta seção)
+        // (v5.7.21: Correção do Conflito de Módulo)
 
         // Delega a anexação de todos os event listeners para módulos especialistas,
         // injetando as dependências necessárias (handlers, serviços e estado).
 
         initializeAuthListeners();
 
-        initializeNavigationListeners({
+        // ========================================================
+        // INÍCIO DA CORREÇÃO v5.7.21
+        // ========================================================
+        // O objeto 'UI' (carregado dinamicamente) é agora injetado 
+        // em 'initializeNavigationListeners' para resolver o conflito
+        // de importação estática vs. dinâmica.
+        initializeNavigationListeners(UI, {
+        // ========================================================
+        // FIM DA CORREÇÃO v5.7.21
+        // ========================================================
             handleBackup,
             handleRestore,
             getOrders: getAllOrders,
@@ -460,10 +469,11 @@ async function main() {
             }
         });
 
+        // Corrigido typo (v5.7.19) de 'savePriceTableBtn' para 'savePriceTableChanges'
         initializeModalAndPricingListeners({
             services: {
                 getAllPricingItems,
-                savePriceTableBtn,
+                savePriceTableChanges, 
                 deletePriceItem
             },
             helpers: {
