@@ -84,7 +84,7 @@ async function main() {
         // ========================================================
         // PARTE 3: LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO
         // ========================================================
-        // (v5.7.15: Lógica de ordenação corrigida)
+        // (v5.7.16: Lógica de ordenação mantida)
 
         const initializeAppLogic = async (user) => {
             const userMappingRef = doc(db, "user_mappings", user.uid);
@@ -117,14 +117,13 @@ async function main() {
                 // --- INICIALIZAÇÃO DE LÓGICA E UI AUXILIAR ---
                 initializeIdleTimer(UI.DOM, handleLogout);
                 initializeAndPopulateDatalists(); 
-                // checkBackupReminder(); // <- REMOVIDO DAQUI (v5.7.15)
                 UI.updateNavButton(currentDashboardView);
                 
                 // --- TORNAR APP VISÍVEL ---
                 UI.DOM.authContainer.classList.add('hidden');
                 UI.DOM.app.classList.remove('hidden');
                 
-                // --- CHAMADAS PÓS-RENDERIZAÇÃO (v5.7.15) ---
+                // --- CHAMADAS PÓS-RENDERIZAÇÃO (v5.7.16) ---
                 // O banner deve ser chamado DEPOIS que #app está visível.
                 checkBackupReminder();
 
@@ -372,13 +371,20 @@ async function main() {
             }
 
             if (needsReminder) {
-                // v5.7.11: Adiciona um pequeno delay (setTimeout)
-                // para garantir que o navegador "pinte" a mudança.
-                // Isso força a animação a rodar no login, em vez de
-                // esperar por um "repaint" (como abrir um modal).
-                setTimeout(() => {
+                // ========================================================
+                // INÍCIO DA CORREÇÃO v5.7.18 (Bug de Repaint v5.7.17)
+                // ========================================================
+                // A tentativa anterior (v5.7.11) usou 'setTimeout', que lida com
+                // o *timing* da execução, mas não garante a *pintura*.
+                // 'requestAnimationFrame' (RAF) é a API correta, pois agenda
+                // a remoção da classe 'hidden' para ocorrer *exatamente antes*
+                // do próximo ciclo de pintura (repaint) do navegador.
+                requestAnimationFrame(() => {
                     UI.DOM.backupReminderBanner.classList.remove('hidden');
-                }, 100); // 100ms de delay
+                });
+                // ========================================================
+                // FIM DA CORREÇÃO v5.7.18
+                // ========================================================
             }
         };
 
