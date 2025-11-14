@@ -29,8 +29,8 @@ import { initializePricingService, savePriceTableChanges, deletePriceItem, getAl
 import { initializeIdleTimer } from './utils.js';
 
 // Módulo de Interface do Usuário (UI) - Importando tudo sob o namespace 'UI'
-// v5.7.2: Adicionado cache-busting ao import do ui.js para forçar o recarregamento
-import * as UI from './ui.js?v=5.7.2';
+// v5.7.3: Adicionado cache-busting ao import do ui.js para forçar o recarregamento
+import * as UI from './ui.js?v=5.7.3';
 
 // Módulos de Listeners (Refatoração v4.3.6+)
 import { initializeAuthListeners } from './listeners/authListeners.js';
