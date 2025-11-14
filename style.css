@@ -24,36 +24,23 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 /* === INÍCIO DAS CORREÇÕES (v5.7.1) === */
 
 /* Z-Index Fix: Garante que os modais principais fiquem acima do banner de backup (z-50) */
+/* Esta é a única correção que permanece. */
 #orderModal, #viewModal, #transactionModal, #priceTableModal {
     z-index: 55;
 }
 
-/* ======================================================== */
-/* INÍCIO DA CORREÇÃO v5.7.27 (Tentativa #9 - Bug de Repaint) */
-/* ======================================================== */
+/* === FIM DAS CORREÇÕES === */
 
-/* Diagnóstico: Todas as tentativas de JS (v5.7.11-v5.7.25) e CSS
-  (v5.7.1, v5.7.20) falharam. O bug persiste.
-  A causa é uma "race condition" entre a "Bomba Atômica" (JS) e
-  o motor de animação do CSS. O navegador "trava" o banner
-  em opacity: 0 (o início da animação 'fadeIn').
+
+/* === INÍCIO DA CORREÇÃO v5.7.30 (LIMPEZA) === */
+/*
+  Diagnóstico: O bug v5.7.17 (banner invisível) foi causado
+  pela classe .toast-enter no HTML, que "travava" a animação
+  em opacity:0 durante a carga (Bomba Atômica).
   
-  Solução (Força Bruta): Usar !important para garantir que
-  a anulação da animação (v5.7.1) vença a cascata IMEDIATAMENTE.
+  Solução: A classe .toast-enter foi removida do index.html.
+  
+  Ação: Todas as tentativas falhas de corrigir a animação
+  (v5.7.1-anim, v5.7.20, v5.7.27) foram removidas deste arquivo.
 */
-#backupReminderBanner.toast-enter {
-    animation: none !important;
-    opacity: 1 !important;
-    transform: scale(1) !important;
-}
-
-/* === FIM DA CORREÇÃO v5.7.27 === */
-
-
-/* === INÍCIO DA CORREÇÃO v5.7.20 (Bug de Camada de Composição) [FALHOU] === */
-/* Mantido para registro, mas a correção v5.7.27 é a ativa. */
-#backupReminderBanner {
-    will-change: opacity, transform;
-    transform: translateZ(0); 
-}
-/* === FIM DA CORREÇÃO v5.7.20 === */
+/* === FIM DA CORREÇÃO v5.7.30 === */
