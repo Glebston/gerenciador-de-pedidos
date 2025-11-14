@@ -37,7 +37,9 @@ function handleEditTransaction(id, getTransactions) {
     }
     
     UI.DOM.transactionModalTitle.textContent = isIncome ? 'Editar Entrada' : 'Editar Despesa';
-    UI.DOM.transactionModal.classList.remove('hidden');
+    
+    // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+    UI.showTransactionModal();
 }
 
 /**
@@ -61,7 +63,9 @@ export function initializeFinanceListeners(deps) {
         UI.DOM.transactionStatusContainer.classList.remove('hidden'); 
         UI.DOM.pago.checked = true; 
         UI.updateSourceSelectionUI(UI.DOM.transactionSourceContainer, 'banco'); 
-        UI.DOM.transactionModal.classList.remove('hidden'); 
+        
+        // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+        UI.showTransactionModal();
     });
 
     UI.DOM.addExpenseBtn.addEventListener('click', () => { 
@@ -72,7 +76,9 @@ export function initializeFinanceListeners(deps) {
         UI.DOM.transactionDate.value = new Date().toISOString().split('T')[0]; 
         UI.DOM.transactionStatusContainer.classList.add('hidden'); 
         UI.updateSourceSelectionUI(UI.DOM.transactionSourceContainer, 'banco'); 
-        UI.DOM.transactionModal.classList.remove('hidden'); 
+        
+        // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+        UI.showTransactionModal();
     });
 
     // --- Formulário de Transação (Modal) ---
@@ -100,11 +106,19 @@ export function initializeFinanceListeners(deps) {
         }
         try {
             await services.saveTransaction(data, UI.DOM.transactionId.value);
-            UI.DOM.transactionModal.classList.add('hidden');
+            
+            // v5.7.6: Centralizado via modalHandler
+            UI.hideTransactionModal();
+
         } catch (error) {
             console.error("Erro ao salvar transação:", error);
             UI.showInfoModal("Não foi possível salvar o lançamento. Verifique sua conexão e tente novamente.");
         }
+    });
+
+    // v5.7.6: Adicionado listener para o botão Cancelar
+    UI.DOM.cancelTransactionBtn.addEventListener('click', () => {
+        UI.hideTransactionModal();
     });
 
     // --- Lista de Transações (Edição, Exclusão, Marcar como Pago) ---
