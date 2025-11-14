@@ -54,7 +54,7 @@ async function main() {
 
         // Módulos de Listeners
         const { initializeAuthListeners } = await import(`./listeners/authListeners.js${cacheBuster}`);
-        const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
+        const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBster}`);
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
         const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners.js${cacheBuster}`);
@@ -116,11 +116,16 @@ async function main() {
                 // --- INICIALIZAÇÃO DE LÓGICA E UI AUXILIAR ---
                 initializeIdleTimer(UI.DOM, handleLogout);
                 initializeAndPopulateDatalists(); 
-                checkBackupReminder();
+                // checkBackupReminder(); // <- REMOVIDO DAQUI (v5.7.15)
                 UI.updateNavButton(currentDashboardView);
                 
+                // --- TORNAR APP VISÍVEL ---
                 UI.DOM.authContainer.classList.add('hidden');
                 UI.DOM.app.classList.remove('hidden');
+                
+                // --- CHAMADAS PÓS-RENDERIZAÇÃO (v5.7.15) ---
+                // O banner deve ser chamado DEPOIS que #app está visível.
+                checkBackupReminder();
 
             } else {
                 UI.showInfoModal("Erro: Usuário não associado a nenhuma empresa. Fale com o suporte.");
@@ -471,5 +476,5 @@ async function main() {
 // PARTE 7: PONTO DE ENTRADA DA APLICAÇÃO (v5.7.7)
 // ========================================================
 // Inicia a função 'main' para carregar dinamicamente 
-// todos os módulos e iniciar a aplicação.
+// todos os módulos e iniciar a aplicaçã
 main();
