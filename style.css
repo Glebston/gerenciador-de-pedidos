@@ -29,6 +29,7 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 }
 
 /* Animation Fix: Força o banner a ser visível, ignorando a animação 'toast-enter' */
+/* NOTA v5.7.20: Esta correção (v5.7.1) é insuficiente, pois o bug persiste. */
 #backupReminderBanner.toast-enter {
     animation: none; /* Desliga a animação que causava invisibilidade */
     opacity: 1;      /* Garante que esteja visível */
@@ -36,3 +37,27 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 }
 
 /* === FIM DAS CORREÇÕES === */
+
+
+/* === INÍCIO DA CORREÇÃO v5.7.20 (Bug de Camada de Composição) === */
+
+/*
+  Diagnóstico: O bug v5.7.17 (banner invisível até o repaint) persiste
+  apesar das correções de JS (setTimeout, rAF, offsetWidth) e da 
+  tentativa de 'animation: none' (v5.7.1).
+  Isso indica um bug de "camada de composição" do navegador.
+  
+  Solução: Usar 'will-change' e 'transform: translateZ(0)' para "promover"
+  o banner para sua própria camada de GPU *antes* que ele precise ser
+  exibido. Isso evita que ele fique "preso" na renderização inicial.
+*/
+#backupReminderBanner {
+    /* Avisa o navegador para preparar otimizações de GPU */
+    will-change: opacity, transform;
+    
+    /* "Null transform" - o truque clássico para forçar a 
+       promoção para uma camada de GPU separada. */
+    transform: translateZ(0); 
+}
+
+/* === FIM DA CORREÇÃO v5.7.20 === */
