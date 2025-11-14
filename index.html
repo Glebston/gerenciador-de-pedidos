@@ -10,8 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="style.css?v=5.7.6">
-</head>
+    </head>
 <body class="antiasaed text-gray-800 bg-slate-50">
 
     <div id="authContainer" class="flex items-center justify-center min-h-screen">
@@ -587,6 +586,23 @@
         </div>
     </div>
     
-    <script type="module" src="js/main.js?v=5.7.3"></script>
-</body>
+    <script type="text/javascript">
+        (function() {
+            // Cria um timestamp único para forçar o cache-busting em proxies
+            const cacheBuster = `v=${new Date().getTime()}`;
+            
+            // 1. Carrega o CSS
+            const cssLink = document.createElement('link');
+            cssLink.rel = 'stylesheet';
+            cssLink.href = `style.css?${cacheBuster}`;
+            document.head.appendChild(cssLink);
+            
+            // 2. Carrega o Módulo JS Principal
+            const mainScript = document.createElement('script');
+            mainScript.type = 'module';
+            mainScript.src = `js/main.js?${cacheBuster}`;
+            document.body.appendChild(mainScript);
+        })();
+    </script>
+    </body>
 </html>
