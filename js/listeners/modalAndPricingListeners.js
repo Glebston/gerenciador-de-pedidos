@@ -16,9 +16,11 @@ export function initializeModalAndPricingListeners(deps) {
     // --- Listeners de Modais Genéricos e Opções ---
 
     // Botões de fechar/cancelar em modais diversos
+    // v5.7.6: Removido 'cancelTransactionBtn' deste loop, pois agora é 
+    // tratado especificamente em financeListeners.js
     [
         UI.DOM.infoModalCloseBtn, 
-        UI.DOM.cancelTransactionBtn, 
+        // UI.DOM.cancelTransactionBtn, // REMOVIDO
         UI.DOM.cancelBalanceBtn, 
         UI.DOM.closeOptionsModalBtn, 
         UI.DOM.settlementCancelBtn
@@ -57,9 +59,14 @@ export function initializeModalAndPricingListeners(deps) {
     // --- Tabela de Preços ---
     UI.DOM.priceTableBtn.addEventListener('click', () => { 
         UI.renderPriceTable(services.getAllPricingItems(), 'view'); 
-        UI.DOM.priceTableModal.classList.remove('hidden'); 
+        
+        // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+        UI.showPriceTableModal(); 
     });
-    UI.DOM.closePriceTableBtn.addEventListener('click', () => UI.DOM.priceTableModal.classList.add('hidden'));
+    
+    // v5.7.6: Centralizado via modalHandler
+    UI.DOM.closePriceTableBtn.addEventListener('click', () => UI.hidePriceTableModal());
+    
     UI.DOM.editPriceTableBtn.addEventListener('click', () => UI.renderPriceTable(services.getAllPricingItems(), 'edit'));
     UI.DOM.cancelPriceTableBtn.addEventListener('click', () => UI.renderPriceTable(services.getAllPricingItems(), 'view'));
 
@@ -107,6 +114,9 @@ export function initializeModalAndPricingListeners(deps) {
     });
 
     // --- Listener Global de Teclado para Atalhos ---
+    // v5.7.6: Esta seção está CORRETA. Ela clica nos botões, 
+    // e os botões agora disparam os listeners corretos que 
+    // usam o modalHandler. Nenhuma alteração necessária aqui.
     document.addEventListener('keydown', (event) => {
         // Atalho para confirmação (Enter)
         if (event.key === 'Enter') {
