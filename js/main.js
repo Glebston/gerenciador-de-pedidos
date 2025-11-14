@@ -54,7 +54,8 @@ async function main() {
 
         // Módulos de Listeners
         const { initializeAuthListeners } = await import(`./listeners/authListeners.js${cacheBuster}`);
-        const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBster}`);
+        // v5.7.16: Corrigido o erro de digitação de 'cacheBster' para 'cacheBuster'
+        const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
         const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners.js${cacheBuster}`);
@@ -83,7 +84,7 @@ async function main() {
         // ========================================================
         // PARTE 3: LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO
         // ========================================================
-        // (Sem alterações lógicas nesta seção)
+        // (v5.7.15: Lógica de ordenação corrigida)
 
         const initializeAppLogic = async (user) => {
             const userMappingRef = doc(db, "user_mappings", user.uid);
@@ -476,5 +477,5 @@ async function main() {
 // PARTE 7: PONTO DE ENTRADA DA APLICAÇÃO (v5.7.7)
 // ========================================================
 // Inicia a função 'main' para carregar dinamicamente 
-// todos os módulos e iniciar a aplicaçã
+// todos os módulos e iniciar a aplicação.
 main();
