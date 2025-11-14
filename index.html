@@ -591,20 +591,30 @@
             // Cria um timestamp único para forçar o cache-busting em proxies
             const cacheBuster = `v=${new Date().getTime()}`;
             
-            // 1. Carrega o CSS
-            const cssLink = document.createElement('link');
-            cssLink.rel = 'stylesheet';
-            cssLink.href = `style.css?${cacheBuster}`;
-            document.head.appendChild(cssLink);
-            
-            // 2. Carrega o Módulo JS Principal
+            // 1. Cria o elemento <script> para o JS Principal
+            //    (Não injeta ainda)
             const mainScript = document.createElement('script');
             mainScript.type = 'module';
             mainScript.src = `js/main.js?${cacheBuster}`;
-            document.body.appendChild(mainScript);
+
+            // 2. Cria o elemento <link> para o CSS
+            const cssLink = document.createElement('link');
+            cssLink.rel = 'stylesheet';
+            cssLink.href = `style.css?${cacheBuster}`;
+            
+            // 3. Define a "Cadeia de Carregamento"
+            //    Somente quando o CSS terminar de carregar (onload),
+            //    nós injetamos o JS.
+            cssLink.onload = function() {
+                // O CSS foi baixado e parseado.
+                // Agora é seguro carregar o JS.
+                document.body.appendChild(mainScript);
+            };
+            
+            // 4. Inicia a cadeia injetando o CSS no <head>
+            document.head.appendChild(cssLink);
         })();
     </script>
     espero que funcione
     </body>
 </html>
-
