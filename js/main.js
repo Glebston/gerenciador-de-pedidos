@@ -16,7 +16,7 @@ async function main() {
 
     try {
         // ========================================================
-        // PARTE 1.A: IMPORTAÇÕES DINÂMICAS DE MÓDULOS
+        // PARTE 1.A: IMPORTAÇÕES DINÂMICAS DE MÓCULOS
         // ========================================================
 
         // Firebase Core (externo, não precisa de cache-buster local)
@@ -122,10 +122,31 @@ async function main() {
                 
                 // --- TORNAR APP VISÍVEL ---
                 UI.DOM.authContainer.classList.add('hidden');
-                UI.DOM.app.classList.remove('hidden');
                 
-                // --- CHAMADAS PÓS-RENDERIZAÇÃO ---
-                checkBackupReminder();
+                // ========================================================
+                // INÍCIO DA CORREÇÃO v5.7.25 (Tentativa #8 - Bug de Repaint)
+                // ========================================================
+                // Diagnóstico: O "Carregador Mestre" (v5.7.7) causa uma
+                // condição de corrida entre a cascata de 'await import()'
+                // e a primeira pintura do navegador.
+                //
+                // Solução: Mover a "revelação" final da UI (o app e o banner)
+                // para uma TAREFA de event loop separada usando setTimeout(0).
+                // Isso cede o controle ao navegador, permitindo que ele
+                // finalize a importação, e então execute a pintura
+                // em uma pilha limpa.
+                
+                setTimeout(() => {
+                    // 1. Revela a aplicação principal
+                    UI.DOM.app.classList.remove('hidden');
+                    
+                    // 2. Chama a lógica do banner.
+                    // (A correção #2 está em checkBackupReminder())
+                    checkBackupReminder();
+                }, 0); // 0ms de delay para criar uma nova tarefa.
+                // ========================================================
+                // FIM DA CORREÇÃO v5.7.25
+                // ========================================================
 
             } else {
                 UI.showInfoModal("Erro: Usuário não associado a nenhuma empresa. Fale com o suporte.");
@@ -372,24 +393,18 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // NOTA v5.7.22
+                // INÍCIO DA CORREÇÃO v5.7.25 (Parte 2)
                 // ========================================================
-                // O bug v5.7.17 foi diagnosticado como um "Conflito de Módulo".
-                // As correções (v5.7.22) estão na PARTE 6, unificando a 'UI'.
-                // Agora que 'UI' é o mesmo objeto em 'main.js' e nos 
-                // 'listeners', a lógica original de 'setTimeout' 
-                // (v5.7.11) deve funcionar como esperado.
-                setTimeout(() => {
-                    // Verificação de segurança (v5.7.21) mantida:
-                    // Não mostra o banner se o usuário já o dispensou
-                    // (o que poderia acontecer se a lógica de 'dismiss'
-                    // fosse mais rápida que o timeout).
-                    if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
-                         UI.DOM.backupReminderBanner.classList.remove('hidden');
-                    }
-                }, 100); // 100ms de delay
+                // O setTimeout(100) (Tentativa #5) foi removido.
+                // A lógica de timing agora é controlada centralmente 
+                // em initializeAppLogic() (Tentativa #8), que move
+                // a chamada desta função para uma nova tarefa.
+                // A função agora é síncrona.
+                if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
+                     UI.DOM.backupReminderBanner.classList.remove('hidden');
+                }
                 // ========================================================
-                // FIM DA NOTA v5.7.22
+                // FIM DA CORREÇÃO v5.7.25
                 // ========================================================
             }
         };
