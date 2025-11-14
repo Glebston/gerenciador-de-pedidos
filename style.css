@@ -23,8 +23,7 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 
 /* === INÍCIO DAS CORREÇÕES (v5.7.1) === */
 
-/* Z-Index Fix: Garante que os modais principais fiquem acima do banner de backup (z-50) */
-/* Esta é a única correção que permanece. */
+/* Z-Index Fix: Garante que os modais principais fiquem acima do banner de backup */
 #orderModal, #viewModal, #transactionModal, #priceTableModal {
     z-index: 55;
 }
@@ -32,15 +31,17 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 /* === FIM DAS CORREÇÕES === */
 
 
-/* === INÍCIO DA CORREÇÃO v5.7.30 (LIMPEZA) === */
+/* === INÍCIO DA CORREÇÃO v5.7.31 (Tentativa #12) === */
 /*
-  Diagnóstico: O bug v5.7.17 (banner invisível) foi causado
-  pela classe .toast-enter no HTML, que "travava" a animação
-  em opacity:0 durante a carga (Bomba Atômica).
+  Diagnóstico: O bug é uma "race condition" com o JIT do Tailwind CDN
+  tentando gerar a classe 'z-50'.
   
-  Solução: A classe .toast-enter foi removida do index.html.
-  
-  Ação: Todas as tentativas falhas de corrigir a animação
-  (v5.7.1-anim, v5.7.20, v5.7.27) foram removidas deste arquivo.
+  Solução: Remover a classe 'z-50' do HTML e aplicar o z-index
+  estaticamente aqui, no nosso CSS, que não está em "race condition".
+  Isso bypassa o JIT do Tailwind para este elemento.
 */
-/* === FIM DA CORREÇÃO v5.7.30 === */
+#backupReminderBanner {
+    z-index: 50;
+}
+
+/* === FIM DA CORREÇÃO v5.7.31 === */
