@@ -28,36 +28,32 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
     z-index: 55;
 }
 
-/* Animation Fix: Força o banner a ser visível, ignorando a animação 'toast-enter' */
-/* NOTA v5.7.20: Esta correção (v5.7.1) é insuficiente, pois o bug persiste. */
+/* ======================================================== */
+/* INÍCIO DA CORREÇÃO v5.7.27 (Tentativa #9 - Bug de Repaint) */
+/* ======================================================== */
+
+/* Diagnóstico: Todas as tentativas de JS (v5.7.11-v5.7.25) e CSS
+  (v5.7.1, v5.7.20) falharam. O bug persiste.
+  A causa é uma "race condition" entre a "Bomba Atômica" (JS) e
+  o motor de animação do CSS. O navegador "trava" o banner
+  em opacity: 0 (o início da animação 'fadeIn').
+  
+  Solução (Força Bruta): Usar !important para garantir que
+  a anulação da animação (v5.7.1) vença a cascata IMEDIATAMENTE.
+*/
 #backupReminderBanner.toast-enter {
-    animation: none; /* Desliga a animação que causava invisibilidade */
-    opacity: 1;      /* Garante que esteja visível */
-    transform: scale(1); /* Garante que esteja no tamanho normal */
+    animation: none !important;
+    opacity: 1 !important;
+    transform: scale(1) !important;
 }
 
-/* === FIM DAS CORREÇÕES === */
+/* === FIM DA CORREÇÃO v5.7.27 === */
 
 
-/* === INÍCIO DA CORREÇÃO v5.7.20 (Bug de Camada de Composição) === */
-
-/*
-  Diagnóstico: O bug v5.7.17 (banner invisível até o repaint) persiste
-  apesar das correções de JS (setTimeout, rAF, offsetWidth) e da 
-  tentativa de 'animation: none' (v5.7.1).
-  Isso indica um bug de "camada de composição" do navegador.
-  
-  Solução: Usar 'will-change' e 'transform: translateZ(0)' para "promover"
-  o banner para sua própria camada de GPU *antes* que ele precise ser
-  exibido. Isso evita que ele fique "preso" na renderização inicial.
-*/
+/* === INÍCIO DA CORREÇÃO v5.7.20 (Bug de Camada de Composição) [FALHOU] === */
+/* Mantido para registro, mas a correção v5.7.27 é a ativa. */
 #backupReminderBanner {
-    /* Avisa o navegador para preparar otimizações de GPU */
     will-change: opacity, transform;
-    
-    /* "Null transform" - o truque clássico para forçar a 
-       promoção para uma camada de GPU separada. */
     transform: translateZ(0); 
 }
-
 /* === FIM DA CORREÇÃO v5.7.20 === */
