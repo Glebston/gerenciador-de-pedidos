@@ -64,7 +64,9 @@ export function initializeOrderListeners(deps) {
     UI.DOM.addOrderBtn.addEventListener('click', () => { 
         setState({ partCounter: 0 }); 
         UI.resetForm(); 
-        UI.DOM.orderModal.classList.remove('hidden'); 
+        
+        // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+        UI.showOrderModal(); 
     });
 
     // ========================================================
@@ -127,7 +129,8 @@ export function initializeOrderListeners(deps) {
             }
 
             // --- ETAPA 4: Feedback ---
-            UI.DOM.orderModal.classList.add('hidden');
+            // v5.7.6: Centralizado via modalHandler
+            UI.hideOrderModal();
             
             if (orderData.orderStatus === 'Finalizado' || orderData.orderStatus === 'Entregue') {
                 const generate = await UI.showConfirmModal(
@@ -168,6 +171,10 @@ export function initializeOrderListeners(deps) {
             partCounter = 0;
             partCounter = UI.populateFormForEdit(order, partCounter);
             setState({ partCounter });
+            
+            // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+            UI.showOrderModal();
+            
         } else if (btn.classList.contains('replicate-btn')) {
             let { partCounter } = getState();
             partCounter = 0;
@@ -189,6 +196,9 @@ export function initializeOrderListeners(deps) {
             UI.DOM.downPaymentStatusPago.checked = true;
             UI.updateSourceSelectionUI(UI.DOM.downPaymentSourceContainer, 'banco');
             
+            // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+            UI.showOrderModal();
+            
         } else if (btn.classList.contains('delete-btn')) {
             UI.showConfirmModal("Tem certeza que deseja excluir este pedido?", "Excluir", "Cancelar")
               .then(async (confirmed) => {
@@ -204,6 +214,10 @@ export function initializeOrderListeners(deps) {
               });
         } else if (btn.classList.contains('view-btn')) {
             UI.viewOrder(order);
+            
+            // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
+            UI.showViewModal();
+            
         } else if (btn.classList.contains('settle-and-deliver-btn')) {
             // ========================================================
             // INÍCIO DA LÓGICA DE QUITAÇÃO v4.2.7
@@ -291,7 +305,8 @@ export function initializeOrderListeners(deps) {
         if (!btn) return;
 
         if (btn.id === 'closeViewBtn') { 
-            UI.DOM.viewModal.classList.add('hidden'); 
+            // v5.7.6: Centralizado via modalHandler
+            UI.hideViewModal();
             UI.DOM.viewModal.innerHTML = ''; 
         }
         if (btn.id === 'comprehensivePdfBtn') {
@@ -300,7 +315,8 @@ export function initializeOrderListeners(deps) {
     });
 
     // --- Interações dentro do Modal de Pedidos ---
-    UI.DOM.cancelBtn.addEventListener('click', () => UI.DOM.orderModal.classList.add('hidden'));
+    // v5.7.6: Centralizado via modalHandler
+    UI.DOM.cancelBtn.addEventListener('click', () => UI.hideOrderModal());
     
     UI.DOM.addPartBtn.addEventListener('click', () => { 
         let { partCounter } = getState();
