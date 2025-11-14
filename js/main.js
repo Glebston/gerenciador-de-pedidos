@@ -372,18 +372,27 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.18 (Bug de Repaint v5.7.17)
+                // INÍCIO DA CORREÇÃO v5.7.19 (Bug de Repaint v5.7.17)
                 // ========================================================
-                // A tentativa anterior (v5.7.11) usou 'setTimeout', que lida com
-                // o *timing* da execução, mas não garante a *pintura*.
-                // 'requestAnimationFrame' (RAF) é a API correta, pois agenda
-                // a remoção da classe 'hidden' para ocorrer *exatamente antes*
-                // do próximo ciclo de pintura (repaint) do navegador.
-                requestAnimationFrame(() => {
-                    UI.DOM.backupReminderBanner.classList.remove('hidden');
-                });
+                // DIAGNÓSTICO: As tentativas de 'setTimeout' (v5.7.11) e
+                // 'requestAnimationFrame' (v5.7.18) falharam. Isso prova
+                // que o bug é um problema de "reflow" extremamente teimoso.
+                
+                // SOLUÇÃO: Forçar o "reflow" (re-layout) do navegador.
+                
+                // 1. Removemos a classe. Neste ponto, o DOM é atualizado,
+                //    mas o navegador ainda não "pintou" a mudança.
+                UI.DOM.backupReminderBanner.classList.remove('hidden');
+
+                // 2. Forçamos o navegador a ler uma propriedade de layout
+                //    (como 'offsetWidth'). Isso obriga o navegador a
+                //    "flushar" sua fila de renderização e recalcular o
+                //    layout, "pintando" a mudança (passo 1) no processo.
+                //    A variável '_' é descartada, seu propósito é apenas
+                //    forçar a leitura.
+                const _ = UI.DOM.backupReminderBanner.offsetWidth;
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.18
+                // FIM DA CORREÇÃO v5.7.19
                 // ========================================================
             }
         };
@@ -454,7 +463,7 @@ async function main() {
         initializeModalAndPricingListeners({
             services: {
                 getAllPricingItems,
-                savePriceTableChanges,
+                savePriceTableBtn,
                 deletePriceItem
             },
             helpers: {
