@@ -1,14 +1,17 @@
 // js/listeners/financeListeners.js
 
-import * as UI from '../ui.js';
+// v5.7.22: REMOVIDA importação estática de UI.
+// import * as UI from '../ui.js';
 
 /**
  * Lida com a lógica de preenchimento do modal para editar uma transação.
  * (Anteriormente em main.js)
+ * v5.7.22: 'UI' agora é injetado nesta função auxiliar.
+ * @param {object} UI - O módulo UI (injetado)
  * @param {string} id - O ID da transação.
  * @param {Function} getTransactions - A função getAllTransactions.
  */
-function handleEditTransaction(id, getTransactions) {
+function handleEditTransaction(UI, id, getTransactions) {
     const transaction = getTransactions().find(t => t.id === id);
     if (!transaction) return;
     
@@ -44,12 +47,14 @@ function handleEditTransaction(id, getTransactions) {
 
 /**
  * Inicializa todos os event listeners relacionados ao Dashboard Financeiro.
+ * v5.7.22: A função agora recebe o módulo 'UI' injetado pelo main.js.
+ * @param {object} UI - O módulo UI (injetado)
  * @param {object} deps - Dependências injetadas
  * @param {object} deps.services - Funções de serviço (saveTransaction, etc.)
  * @param {Function} deps.getConfig - Getter para userBankBalanceConfig
  * @param {Function} deps.setConfig - Setter para userBankBalanceConfig (para atualizar o initialBalance)
  */
-export function initializeFinanceListeners(deps) {
+export function initializeFinanceListeners(UI, deps) {
 
     const { services, getConfig, setConfig } = deps;
 
@@ -128,7 +133,8 @@ export function initializeFinanceListeners(deps) {
         
         const id = btn.dataset.id;
         if (btn.classList.contains('edit-transaction-btn')) {
-            handleEditTransaction(id, services.getAllTransactions); // Usa a função auxiliar local
+            // v5.7.22: Injeta a UI na função auxiliar
+            handleEditTransaction(UI, id, services.getAllTransactions);
         } else if (btn.classList.contains('delete-transaction-btn')) {
             
             // v5.7.1: Bloco removido.
