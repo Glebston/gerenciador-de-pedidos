@@ -1,11 +1,14 @@
 // js/listeners/navigationListeners.js
 
-import * as UI from '../ui.js';
+// v5.7.21: Removida a importação estática de 'UI'.
+// O 'UI' agora é injetado pelo main.js (Orquestrador)
+// import * as UI from '../ui.js'; 
 import { resetIdleTimer } from '../utils.js'; // Importa o utilitário
 
 /**
  * Inicializa listeners de navegação, menu de usuário e eventos globais da UI.
- * * @param {object} deps - Dependências injetadas (handlers, state, etc.)
+ * @param {object} UI - O módulo UI (injetado pelo main.js)
+ * @param {object} deps - Dependências injetadas (handlers, state, etc.)
  * @param {Function} deps.handleBackup - Handler para o backup
  * @param {Function} deps.handleRestore - Handler para a restauração
  * @param {Function} deps.getOrders - Getter para getAllOrders
@@ -14,10 +17,17 @@ import { resetIdleTimer } from '../utils.js'; // Importa o utilitário
  * @param {Function} deps.getState - Getter para o estado da view (currentDashboardView, currentOrdersView)
  * @param {Function} deps.setState - Setter para o estado da view
  */
-export function initializeNavigationListeners(deps) {
+// v5.7.21: A função agora aceita 'UI' como o primeiro argumento.
+export function initializeNavigationListeners(UI, deps) {
 
     // --- Eventos Globais da Aplicação ---
-    window.addEventListener('load', () => UI.handleCookieConsent());
+    // v5.7.21: Corrigido o 'UI.handleCookieConsent()' que estava quebrado
+    // (estava usando a UI estática nula)
+    window.addEventListener('load', () => {
+        if (localStorage.getItem('cookieConsent') !== 'true') {
+            UI.DOM.cookieBanner.classList.remove('hidden');
+        }
+    });
     ['mousemove', 'keydown', 'click', 'scroll'].forEach(event => window.addEventListener(event, resetIdleTimer));
 
     // --- Navegação Principal ---
