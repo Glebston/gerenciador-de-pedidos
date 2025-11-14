@@ -1,15 +1,18 @@
 // js/listeners/modalAndPricingListeners.js
 
-import * as UI from '../ui.js';
+// v5.7.22: REMOVIDA importação estática de UI.
+// import * as UI from '../ui.js';
 
 /**
  * Inicializa os listeners para modais genéricos, tabela de preços e atalhos de teclado.
+ * v5.7.22: A função agora recebe o módulo 'UI' injetado pelo main.js.
+ * @param {object} UI - O módulo UI (injetado)
  * @param {object} deps - Dependências injetadas
  * @param {object} deps.services - Funções de serviço (getAllPricingItems, etc.)
  * @param {object} deps.helpers - Funções auxiliares (getOptionsFromStorage, etc.)
  * @param {Function} deps.getState - Getter para o estado (currentOptionType)
  */
-export function initializeModalAndPricingListeners(deps) {
+export function initializeModalAndPricingListeners(UI, deps) {
     
     const { services, helpers, getState } = deps;
 
