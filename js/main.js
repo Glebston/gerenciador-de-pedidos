@@ -366,7 +366,13 @@ async function main() {
             }
 
             if (needsReminder) {
-                UI.DOM.backupReminderBanner.classList.remove('hidden');
+                // v5.7.11: Adiciona um pequeno delay (setTimeout)
+                // para garantir que o navegador "pinte" a mudança.
+                // Isso força a animação a rodar no login, em vez de
+                // esperar por um "repaint" (como abrir um modal).
+                setTimeout(() => {
+                    UI.DOM.backupReminderBanner.classList.remove('hidden');
+                }, 100); // 100ms de delay
             }
         };
 
