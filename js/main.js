@@ -125,6 +125,7 @@ async function main() {
                 
                 // ========================================================
                 // (v5.7.32) "Pintura Decoupled" - Tarefa 1
+                // (Preservado)
                 // ========================================================
                 
                 setTimeout(() => {
@@ -384,23 +385,35 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.33 (Tentativa #14)
+                // INÍCIO DA CORREÇÃO v5.7.34 (Tentativa #15 - "Stuck Frame")
                 // ========================================================
-                // O delay de 50ms (v5.7.32) não foi suficiente para
-                // evitar a "Colisão de Pintura" com a renderização
-                // principal do dashboard.
+                // O bug: A classe `.toast-enter` (com opacity: 0) está no
+                // HTML. O JS (v5.7.33) apenas removia `.hidden`.
+                // O navegador renderizava o estado final (visível, opacity: 0)
+                // mas não via "mudança" para disparar a animação.
                 //
-                // Solução: Aumentar o "tempo de segurança" para 250ms,
-                // garantindo que o dashboard esteja estável antes
-                // de tentar pintar o banner.
+                // A Solução: Forçar a repintura em ticks separados.
                 
+                const banner = UI.DOM.backupReminderBanner;
+
+                // Ação 1 (Tick Atual):
+                // Garante que o banner esteja visível (remove .hidden)
+                // E remove a classe de animação (.toast-enter).
+                // O navegador vai "ver" o banner visível, sem animação.
+                banner.classList.remove('hidden');
+                banner.classList.remove('toast-enter');
+
+                // Ação 2 (Próximo Tick de Event Loop):
+                // Agenda a re-adição da classe de animação.
+                // O '0' força o navegador a primeiro pintar o estado da Ação 1.
                 setTimeout(() => {
-                    if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
-                         UI.DOM.backupReminderBanner.classList.remove('hidden');
-                    }
-                }, 250); // Delay aumentado para 250ms
+                    // Ação 3 (Tick N+1):
+                    // O navegador vê a *adição* da classe '.toast-enter'
+                    // e agora, finalmente, dispara a animação de opacity.
+                    banner.classList.add('toast-enter');
+                }, 0); // O delay de 0ms é intencional para forçar um novo tick.
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.33
+                // FIM DA CORREÇÃO v5.7.34
                 // ========================================================
             }
         };
