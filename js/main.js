@@ -385,35 +385,37 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.34 (Tentativa #15 - "Stuck Frame")
+                // INÍCIO DA CORREÇÃO v5.7.38 (Tentativa #18 - "Forced Reflow")
                 // ========================================================
-                // O bug: A classe `.toast-enter` (com opacity: 0) está no
-                // HTML. O JS (v5.7.33) apenas removia `.hidden`.
-                // O navegador renderizava o estado final (visível, opacity: 0)
-                // mas não via "mudança" para disparar a animação.
+                // Diagnóstico: "Sintoma B" - a animação não roda no login.
+                // A tentativa v5.7.34 (setTimeout(0)) falhou.
                 //
-                // A Solução: Forçar a repintura em ticks separados.
+                // Solução: Usar a técnica "Forced Reflow" (offsetWidth)
+                // para forçar o navegador a pintar o estado inicial
+                // ANTES de aplicar a classe de animação.
                 
                 const banner = UI.DOM.backupReminderBanner;
 
-                // Ação 1 (Tick Atual):
+                // Ação 1 (Tick 1):
                 // Garante que o banner esteja visível (remove .hidden)
                 // E remove a classe de animação (.toast-enter).
-                // O navegador vai "ver" o banner visível, sem animação.
                 banner.classList.remove('hidden');
                 banner.classList.remove('toast-enter');
 
-                // Ação 2 (Próximo Tick de Event Loop):
-                // Agenda a re-adição da classe de animação.
-                // O '0' força o navegador a primeiro pintar o estado da Ação 1.
-                setTimeout(() => {
-                    // Ação 3 (Tick N+1):
-                    // O navegador vê a *adição* da classe '.toast-enter'
-                    // e agora, finalmente, dispara a animação de opacity.
-                    banner.classList.add('toast-enter');
-                }, 0); // O delay de 0ms é intencional para forçar um novo tick.
+                // Ação 2 (Forçar Reflow):
+                // Ao ler a propriedade 'offsetWidth', forçamos o navegador
+                // a parar o JS e calcular/pintar o layout do banner
+                // no estado da Ação 1 (visível, sem animação).
+                // O 'void' é usado para evitar lint errors sobre "no-unused-expressions".
+                void banner.offsetWidth;
+
+                // Ação 3 (Tick 2):
+                // Agora, no próximo quadro de pintura (após o reflow),
+                // o navegador vê a *adição* da classe '.toast-enter'
+                // e finalmente dispara a animação de fade-in.
+                banner.classList.add('toast-enter');
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.34
+                // FIM DA CORREÇÃO v5.7.38
                 // ========================================================
             }
         };
