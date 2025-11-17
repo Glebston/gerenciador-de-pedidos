@@ -123,9 +123,9 @@ async function main() {
                 UI.DOM.authContainer.classList.add('hidden');
                 
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.39 (Tentativa #19 - "Render Queue")
-                // (Mantida, pois é uma boa prática)
+                // INÍCIO DA CORREÇÃO v5.7.41 (Tentativa #21 - A Combinação)
                 // ========================================================
+                // Mantém a lógica da v5.7.39
                 
                 // Tarefa 1 (Tick 2): Mostrar o App imediatamente.
                 setTimeout(() => {
@@ -137,12 +137,13 @@ async function main() {
                 // os dashboards (tarefa pesada) antes de tentarmos
                 // disparar a animação (tarefa leve).
                 setTimeout(() => {
-                    // A função (v5.7.40) agora contém a nova lógica
-                    // de "ordem invertida".
+                    // Esta função agora executa a lógica
+                    // "Forced Reflow" (v5.7.38) em uma
+                    // fila de renderização "limpa".
                     checkBackupReminder();
                 }, 150); // Delay de segurança
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.39
+                // FIM DA CORREÇÃO v5.7.41
                 // ========================================================
 
             } else {
@@ -228,7 +229,7 @@ async function main() {
                 const startOfThisYear = new Date(now.getFullYear(), 0, 1);
                 const endOfThisYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
                 if (filter === 'thisMonth') { startDate = startOfThisMonth; endDate = endOfThisMonth; }
-                if (filter === 'lastMonth') { startDate = startOfLastMonth; endDate = endOfThisMonth; }
+                if (filter === 'lastMonth') { startDate = startOfLastMonth; endDate = endOfLastMonth; }
                 if (filter === 'thisYear') { startDate = startOfThisYear; endDate = endOfThisYear; }
             }
             
@@ -390,33 +391,36 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.40 (Tentativa #20 - "Ordem Invertida")
+                // INÍCIO DA CORREÇÃO v5.7.41 (Tentativa #21 - A Combinação)
                 // ========================================================
-                // Diagnóstico: Todas as 19 tentativas falharam ao tentar
-                // adicionar a animação DEPOIS de mostrar o banner,
-                // perdendo o gatilho 'display: none'.
+                // Diagnóstico: Combinar as duas melhores tentativas.
+                // 1. O 'setTimeout(150)' (v5.7.39) limpa a fila de renderização.
+                // 2. O 'offsetWidth' (v5.7.38) força a animação.
                 //
-                // Solução: Inverter a lógica (baseado na especificação [45]).
-                // Primeiro "armamos" a animação e DEPOIS "puxamos o gatilho".
+                // Solução: RESTAURAR a lógica v5.7.38 ("Forced Reflow"),
+                // que agora será executada com a fila "limpa".
                 
                 const banner = UI.DOM.backupReminderBanner;
 
-                // Ação 1: "Armar" o banner.
-                // Adiciona a classe de animação (.toast-enter)
-                // ENQUANTO o banner ainda está 'display: none' (hidden).
-                banner.classList.add('toast-enter');
-
-                // Ação 2: "Puxar o Gatilho".
-                // Remove a classe 'hidden' (muda de 'display: none' para 'block').
-                // O navegador agora vê a mudança de display E a animação
-                // já vinculada, o que deve (segundo a especificação)
-                // disparar a animação automaticamente.
+                // Ação 1 (Tick 1):
+                // Garante que o banner esteja visível (remove .hidden)
+                // E remove a classe de animação (.toast-enter).
                 banner.classList.remove('hidden');
-                
-                // (As lógicas de 'offsetWidth' e 'setTimeout(0)' foram removidas
-                // pois esta nova abordagem as torna desnecessárias).
+                banner.classList.remove('toast-enter');
+
+                // Ação 2 (Forçar Reflow):
+                // Ao ler a propriedade 'offsetWidth', forçamos o navegador
+                // a parar o JS e calcular/pintar o layout do banner
+                // no estado da Ação 1 (visível, sem animação).
+                void banner.offsetWidth;
+
+                // Ação 3 (Tick 2):
+                // Agora, no próximo quadro de pintura (após o reflow),
+                // o navegador vê a *adição* da classe '.toast-enter'
+                // e finalmente dispara a animação de fade-in.
+                banner.classList.add('toast-enter');
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.40
+                // FIM DA CORREÇÃO v5.7.41
                 // ========================================================
             }
         };
