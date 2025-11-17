@@ -85,8 +85,7 @@ async function main() {
         // ========================================================
         // PARTE 3: LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO
         // ========================================================
-        // (Sem alterações lógicas nesta seção)
-
+        
         const initializeAppLogic = async (user) => {
             const userMappingRef = doc(db, "user_mappings", user.uid);
             const userMappingSnap = await getDoc(userMappingRef);
@@ -111,7 +110,7 @@ async function main() {
                 initializeFinanceService(userCompanyId, handleFinanceChange, () => userBankBalanceConfig);
                 initializePricingService(userCompanyId, handlePricingChange); 
                 
-                // --- RENDERIZAÇÃO INICIAL ---
+                // --- RENDERIZAÇÃO INICIAL (PESADA) ---
                 UI.renderOrders(getAllOrders(), currentOrdersView);
                 UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig);
                 
@@ -124,20 +123,26 @@ async function main() {
                 UI.DOM.authContainer.classList.add('hidden');
                 
                 // ========================================================
-                // (v5.7.32) "Pintura Decoupled" - Tarefa 1
-                // (Preservado)
+                // INÍCIO DA CORREÇÃO v5.7.39 (Tentativa #19 - "Render Queue")
+                // (Mantida, pois é uma boa prática)
                 // ========================================================
                 
+                // Tarefa 1 (Tick 2): Mostrar o App imediatamente.
                 setTimeout(() => {
-                    // TAREFA 1 (Pintura Pesada): Revela a aplicação
                     UI.DOM.app.classList.remove('hidden');
-                    
-                    // Dispara a TAREFA 2 (Pintura Leve), que terá
-                    // seu próprio setTimeout.
-                    checkBackupReminder();
                 }, 0); 
+                
+                // Tarefa 2 (Tick 3, Atrasado): Mostrar o Banner.
+                // Damos 150ms para o navegador terminar de pintar
+                // os dashboards (tarefa pesada) antes de tentarmos
+                // disparar a animação (tarefa leve).
+                setTimeout(() => {
+                    // A função (v5.7.40) agora contém a nova lógica
+                    // de "ordem invertida".
+                    checkBackupReminder();
+                }, 150); // Delay de segurança
                 // ========================================================
-                // FIM DA CORREÇÃO
+                // FIM DA CORREÇÃO v5.7.39
                 // ========================================================
 
             } else {
@@ -223,7 +228,7 @@ async function main() {
                 const startOfThisYear = new Date(now.getFullYear(), 0, 1);
                 const endOfThisYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
                 if (filter === 'thisMonth') { startDate = startOfThisMonth; endDate = endOfThisMonth; }
-                if (filter === 'lastMonth') { startDate = startOfLastMonth; endDate = endOfLastMonth; }
+                if (filter === 'lastMonth') { startDate = startOfLastMonth; endDate = endOfThisMonth; }
                 if (filter === 'thisYear') { startDate = startOfThisYear; endDate = endOfThisYear; }
             }
             
@@ -385,37 +390,33 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.38 (Tentativa #18 - "Forced Reflow")
+                // INÍCIO DA CORREÇÃO v5.7.40 (Tentativa #20 - "Ordem Invertida")
                 // ========================================================
-                // Diagnóstico: "Sintoma B" - a animação não roda no login.
-                // A tentativa v5.7.34 (setTimeout(0)) falhou.
+                // Diagnóstico: Todas as 19 tentativas falharam ao tentar
+                // adicionar a animação DEPOIS de mostrar o banner,
+                // perdendo o gatilho 'display: none'.
                 //
-                // Solução: Usar a técnica "Forced Reflow" (offsetWidth)
-                // para forçar o navegador a pintar o estado inicial
-                // ANTES de aplicar a classe de animação.
+                // Solução: Inverter a lógica (baseado na especificação [45]).
+                // Primeiro "armamos" a animação e DEPOIS "puxamos o gatilho".
                 
                 const banner = UI.DOM.backupReminderBanner;
 
-                // Ação 1 (Tick 1):
-                // Garante que o banner esteja visível (remove .hidden)
-                // E remove a classe de animação (.toast-enter).
-                banner.classList.remove('hidden');
-                banner.classList.remove('toast-enter');
-
-                // Ação 2 (Forçar Reflow):
-                // Ao ler a propriedade 'offsetWidth', forçamos o navegador
-                // a parar o JS e calcular/pintar o layout do banner
-                // no estado da Ação 1 (visível, sem animação).
-                // O 'void' é usado para evitar lint errors sobre "no-unused-expressions".
-                void banner.offsetWidth;
-
-                // Ação 3 (Tick 2):
-                // Agora, no próximo quadro de pintura (após o reflow),
-                // o navegador vê a *adição* da classe '.toast-enter'
-                // e finalmente dispara a animação de fade-in.
+                // Ação 1: "Armar" o banner.
+                // Adiciona a classe de animação (.toast-enter)
+                // ENQUANTO o banner ainda está 'display: none' (hidden).
                 banner.classList.add('toast-enter');
+
+                // Ação 2: "Puxar o Gatilho".
+                // Remove a classe 'hidden' (muda de 'display: none' para 'block').
+                // O navegador agora vê a mudança de display E a animação
+                // já vinculada, o que deve (segundo a especificação)
+                // disparar a animação automaticamente.
+                banner.classList.remove('hidden');
+                
+                // (As lógicas de 'offsetWidth' e 'setTimeout(0)' foram removidas
+                // pois esta nova abordagem as torna desnecessárias).
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.38
+                // FIM DA CORREÇÃO v5.7.40
                 // ========================================================
             }
         };
