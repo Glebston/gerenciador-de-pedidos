@@ -124,28 +124,20 @@ async function main() {
                 UI.DOM.authContainer.classList.add('hidden');
                 
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.25 (Tentativa #8 - Bug de Repaint)
+                // INÍCIO DA CORREÇÃO v5.7.32 (Tentativa #13)
                 // ========================================================
-                // Diagnóstico: O "Carregador Mestre" (v5.7.7) causa uma
-                // condição de corrida entre a cascata de 'await import()'
-                // e a primeira pintura do navegador.
-                //
-                // Solução: Mover a "revelação" final da UI (o app e o banner)
-                // para uma TAREFA de event loop separada usando setTimeout(0).
-                // Isso cede o controle ao navegador, permitindo que ele
-                // finalize a importação, e então execute a pintura
-                // em uma pilha limpa.
+                // Mantém a correção v5.7.25 (setTimeout(0) principal)
                 
                 setTimeout(() => {
-                    // 1. Revela a aplicação principal
+                    // TAREFA 1 (Pintura Pesada): Revela a aplicação
                     UI.DOM.app.classList.remove('hidden');
                     
-                    // 2. Chama a lógica do banner.
-                    // (A correção #2 está em checkBackupReminder())
+                    // Dispara a TAREFA 2 (Pintura Leve), que terá
+                    // seu próprio setTimeout.
                     checkBackupReminder();
-                }, 0); // 0ms de delay para criar uma nova tarefa.
+                }, 0); 
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.25
+                // FIM DA CORREÇÃO v5.7.32
                 // ========================================================
 
             } else {
@@ -358,7 +350,7 @@ async function main() {
                     UI.showInfoModal("Arquivo de backup inválido ou corrompido.");
                 }
             };
-            reader.readAsText(file);
+            reader.readText(file);
             event.target.value = '';
         };
 
@@ -393,18 +385,23 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.25 (Parte 2)
+                // INÍCIO DA CORREÇÃO v5.7.32 (Tentativa #13)
                 // ========================================================
-                // O setTimeout(100) (Tentativa #5) foi removido.
-                // A lógica de timing agora é controlada centralmente 
-                // em initializeAppLogic() (Tentativa #8), que move
-                // a chamada desta função para uma nova tarefa.
-                // A função agora é síncrona.
-                if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
-                     UI.DOM.backupReminderBanner.classList.remove('hidden');
-                }
+                // Diagnóstico: "Colisão de Pintura" entre a revelação
+                // do #app e a revelação do #backupReminderBanner.
+                //
+                // Solução: "Decoupled Paint". A revelação do #app
+                // ocorre na TAREFA 1 (via setTimeout(0) em initializeAppLogic).
+                // Esta lógica agora é TAREFA 2, disparada 50ms após
+                // a TAREFA 1 ter começado.
+                
+                setTimeout(() => {
+                    if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
+                         UI.DOM.backupReminderBanner.classList.remove('hidden');
+                    }
+                }, 50); // 50ms de delay para "desacoplar" da pintura do #app
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.25
+                // FIM DA CORREÇÃO v5.7.32
                 // ========================================================
             }
         };
@@ -422,7 +419,7 @@ async function main() {
         // ========================================================
         // O objeto 'UI' (carregado dinamicamente) é agora injetado 
         // em TODOS os módulos de listener para resolver o conflito
-        // de importação estática vs. dinâmica ("cérebro dividido").
+        // de importação estática vs. dinâmica ("célebro dividido").
 
         initializeAuthListeners(UI);
 
