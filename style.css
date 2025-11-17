@@ -31,24 +31,17 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 /* === FIM DAS CORREÇÕES === */
 
 
-/* === INÍCIO DA CORREÇÃO v5.7.35 (Tentativa #16 - "Bypass" Total do JIT) === */
+/* === INÍCIO DA CORREÇÃO v5.7.38 (Parte 2: Reversão) === */
 /*
-  Diagnóstico: O bug de "lugar errado" é uma "race condition" com o JIT
-  do Tailwind CDN tentando gerar as classes de posicionamento.
-  
-  Solução: Remover TODAS as classes de layout do HTML e aplicá-las
-  estaticamente aqui, no CSS. Isso "bypassa" o JIT para este elemento.
+  O bloco de código v5.7.35 foi REMOVIDO daqui.
+  O diagnóstico do "lugar errado" (JIT) estava incorreto.
+  As classes do Tailwind no index.html (fixed, bottom-5, etc.) 
+  estão funcionando como esperado.
 */
+
+/* v5.7.31 (Mantido): Esta regra ainda é necessária */
 #backupReminderBanner {
-    /* v5.7.31 (Existente): */
     z-index: 50; 
-    
-    /* v5.7.35 (Novas regras movidas do HTML): */
-    position: fixed;
-    bottom: 1.25rem;  /* Equivalente ao 'bottom-5' do Tailwind */
-    right: 1.25rem;   /* Equivalente ao 'right-5' do Tailwind */
-    width: 100%;
-    max-width: 28rem; /* Equivalente ao 'max-w-sm' do Tailwind */
 }
 
-/* === FIM DA CORREÇÃO v5.7.35 === */
+/* === FIM DA CORREÇÃO v5.7.38 === */
