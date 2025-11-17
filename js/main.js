@@ -124,9 +124,8 @@ async function main() {
                 UI.DOM.authContainer.classList.add('hidden');
                 
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.32 (Tentativa #13)
+                // (v5.7.32) "Pintura Decoupled" - Tarefa 1
                 // ========================================================
-                // Mantém a correção v5.7.25 (setTimeout(0) principal)
                 
                 setTimeout(() => {
                     // TAREFA 1 (Pintura Pesada): Revela a aplicação
@@ -137,7 +136,7 @@ async function main() {
                     checkBackupReminder();
                 }, 0); 
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.32
+                // FIM DA CORREÇÃO
                 // ========================================================
 
             } else {
@@ -385,23 +384,23 @@ async function main() {
 
             if (needsReminder) {
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.32 (Tentativa #13)
+                // INÍCIO DA CORREÇÃO v5.7.33 (Tentativa #14)
                 // ========================================================
-                // Diagnóstico: "Colisão de Pintura" entre a revelação
-                // do #app e a revelação do #backupReminderBanner.
+                // O delay de 50ms (v5.7.32) não foi suficiente para
+                // evitar a "Colisão de Pintura" com a renderização
+                // principal do dashboard.
                 //
-                // Solução: "Decoupled Paint". A revelação do #app
-                // ocorre na TAREFA 1 (via setTimeout(0) em initializeAppLogic).
-                // Esta lógica agora é TAREFA 2, disparada 50ms após
-                // a TAREFA 1 ter começado.
+                // Solução: Aumentar o "tempo de segurança" para 250ms,
+                // garantindo que o dashboard esteja estável antes
+                // de tentar pintar o banner.
                 
                 setTimeout(() => {
                     if (UI.DOM.backupReminderBanner.classList.contains('hidden')) {
                          UI.DOM.backupReminderBanner.classList.remove('hidden');
                     }
-                }, 50); // 50ms de delay para "desacoplar" da pintura do #app
+                }, 250); // Delay aumentado para 250ms
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.32
+                // FIM DA CORREÇÃO v5.7.33
                 // ========================================================
             }
         };
