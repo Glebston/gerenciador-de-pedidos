@@ -10,17 +10,11 @@
     <link rel="icon" href="https://i.ibb.co/BHq1HsPG/2-removebg-preview.png">
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
-
     <script src="https://cdn.tailwindcss.com/3.4.1"></script>
 
     <script>
-        // Verifica se o motor moderno carregou
         window.onload = function() {
-            if (typeof tailwind === 'undefined') {
-                console.warn('⚠️ Motor Tailwind JIT bloqueado. Usando CSS estático (v2.2.19) como fallback.');
-                // O site vai funcionar visualmente graças ao <link> acima.
-            } else {
-                console.log('✅ Motor Tailwind JIT carregado com sucesso!');
+            if (typeof tailwind !== 'undefined') {
                 tailwind.config = { theme: { extend: {} } };
             }
         };
@@ -34,13 +28,16 @@
 
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Fallback para classes JIT que não existem no v2 (CSS Estático) */
+        
+        /* CORREÇÃO CRÍTICA v5.7.56: Força a classe hidden a funcionar */
+        /* Isso impede que o Login e o App apareçam juntos */
+        .hidden { display: none !important; }
+        
+        /* Ajustes de Z-Index */
         .z-\[60\] { z-index: 60 !important; }
         .z-\[70\] { z-index: 70 !important; }
         .z-\[80\] { z-index: 80 !important; }
         .z-\[100\] { z-index: 100 !important; }
-        .max-h-\[90vh\] { max-height: 90vh !important; }
-        .max-h-\[95vh\] { max-height: 95vh !important; }
         
         /* Animações */
         .modal-enter { animation: modalFadeIn 0.2s ease-out forwards; }
@@ -497,7 +494,7 @@
     <datalist id="part-type-list"></datalist>
     <datalist id="part-material-list"></datalist>
 
-    <script src="js/main.js?v=5.7.55" type="module"></script>
+    <script src="js/main.js?v=5.7.56" type="module"></script>
 
 </body>
 </html>
