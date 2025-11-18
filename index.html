@@ -29,11 +29,26 @@
     <style>
         body { font-family: 'Inter', sans-serif; }
         
-        /* CORREÇÃO CRÍTICA v5.7.56: Força a classe hidden a funcionar */
-        /* Isso impede que o Login e o App apareçam juntos */
-        .hidden { display: none !important; }
+        /* === A CORREÇÃO TÉCNICA (v5.7.57) === */
+        /* Usamos ID (#) + Classe (.) para criar uma regra de especificidade altíssima. */
+        /* Isso vence qualquer regra de 'display: flex' que o Tailwind tente aplicar. */
         
-        /* Ajustes de Z-Index */
+        #authContainer.hidden {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            overflow: hidden !important;
+            pointer-events: none !important;
+        }
+
+        #app.hidden {
+            display: none !important;
+        }
+
+        /* ==================================== */
+        
+        /* Ajustes de Z-Index manuais para garantir sobreposição correta */
         .z-\[60\] { z-index: 60 !important; }
         .z-\[70\] { z-index: 70 !important; }
         .z-\[80\] { z-index: 80 !important; }
@@ -48,7 +63,7 @@
 </head>
 <body class="antialiased text-gray-800 bg-slate-50">
 
-    <div id="authContainer" class="flex items-center justify-center min-h-screen">
+    <div id="authContainer" class="flex items-center justify-center min-h-screen bg-slate-50 transition-all duration-300">
         <div class="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-md">
             <form id="loginForm">
                 <div class="flex justify-center mb-4">
@@ -494,7 +509,7 @@
     <datalist id="part-type-list"></datalist>
     <datalist id="part-material-list"></datalist>
 
-    <script src="js/main.js?v=5.7.56" type="module"></script>
+    <script src="js/main.js?v=5.7.57" type="module"></script>
 
 </body>
 </html>
