@@ -6,28 +6,40 @@ import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensiveP
 
 /**
  * Coleta os dados do formulário do pedido.
- * Esta é uma função auxiliar local para o módulo de listeners de pedido.
- * (Anteriormente em main.js)
- * v5.7.22: 'UI' agora é injetado nesta função auxiliar.
- * @param {object} UI - O módulo UI (injetado)
+ * v5.8.4: Adicionada blindagem ao campo UI.DOM.paymentMethod
  */
 function collectFormData(UI) {
     // Coleta a origem (Banco/Caixa) do adiantamento
-    const activeSourceEl = UI.DOM.downPaymentSourceContainer.querySelector('.source-selector.active');
+    let activeSource = 'banco';
+    if (UI.DOM.downPaymentSourceContainer) {
+        const activeSourceEl = UI.DOM.downPaymentSourceContainer.querySelector('.source-selector.active');
+        if (activeSourceEl && activeSourceEl.dataset.source) {
+            activeSource = activeSourceEl.dataset.source;
+        }
+    }
     
+    const isAReceber = UI.DOM.downPaymentStatusAReceber ? UI.DOM.downPaymentStatusAReceber.checked : false;
+
+    // APLICADA A BLINDAGEM AO paymentMethod
+    const paymentMethodValue = UI.DOM.paymentMethod ? UI.DOM.paymentMethod.value : '';
+
     const data = {
-        clientName: UI.DOM.clientName.value, clientPhone: UI.DOM.clientPhone.value, orderStatus: UI.DOM.orderStatus.value,
-        orderDate: UI.DOM.orderDate.value, deliveryDate: UI.DOM.deliveryDate.value, generalObservation: UI.DOM.generalObservation.value,
+        clientName: UI.DOM.clientName.value, 
+        clientPhone: UI.DOM.clientPhone.value, 
+        orderStatus: UI.DOM.orderStatus.value,
+        orderDate: UI.DOM.orderDate.value, 
+        deliveryDate: UI.DOM.deliveryDate.value, 
+        generalObservation: UI.DOM.generalObservation.value,
         parts: [], 
         downPayment: parseFloat(UI.DOM.downPayment.value) || 0, 
         discount: parseFloat(UI.DOM.discount.value) || 0,
-        paymentMethod: UI.DOM.paymentMethod.value, 
+        paymentMethod: paymentMethodValue, // Agora é seguro
         mockupUrls: Array.from(UI.DOM.existingFilesContainer.querySelectorAll('a')).map(a => a.href),
         
-        // Novos campos da "Ponte" (salvos no pedido para referência futura)
-        downPaymentDate: UI.DOM.downPaymentDate.value || new Date().toISOString().split('T')[0],
-        paymentFinSource: activeSourceEl ? activeSourceEl.dataset.source : 'banco', // Padrão 'banco' se nada selecionado
-        paymentFinStatus: UI.DOM.downPaymentStatusAReceber.checked ? 'a_receber' : 'pago'
+        // Novos campos da "Ponte"
+        downPaymentDate: UI.DOM.downPaymentDate ? UI.DOM.downPaymentDate.value : new Date().toISOString().split('T')[0],
+        paymentFinSource: activeSource,
+        paymentFinStatus: isAReceber ? 'a_receber' : 'pago'
     };
     
     UI.DOM.partsContainer.querySelectorAll('.part-item').forEach(p => {
@@ -53,13 +65,6 @@ function collectFormData(UI) {
 /**
  * Inicializa todos os event listeners relacionados a Pedidos.
  * v5.7.22: A função agora recebe o módulo 'UI' injetado pelo main.js.
- * @param {object} UI - O módulo UI (injetado)
- * @param {object} deps - Dependências injetadas
- * @param {Function} deps.getState - Getter para o estado (partCounter, etc.)
- * @param {Function} deps.setState - Setter para o estado
- * @param {Function} deps.getOptionsFromStorage - Função auxiliar do main.js
- * @param {object} deps.services - Funções de serviço (saveOrder, getOrderById, etc.)
- * @param {string} deps.userCompanyName - Nome da empresa do usuário
  */
 export function initializeOrderListeners(UI, deps) {
 
@@ -69,8 +74,6 @@ export function initializeOrderListeners(UI, deps) {
     UI.DOM.addOrderBtn.addEventListener('click', () => { 
         setState({ partCounter: 0 }); 
         UI.resetForm(); 
-        
-        // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
         UI.showOrderModal(); 
     });
 
@@ -89,23 +92,19 @@ export function initializeOrderListeners(UI, deps) {
             const newUrls = (await Promise.all(uploadPromises)).filter(Boolean);
             
             // --- ETAPA 2: Coletar Dados e Salvar Pedido ---
-            const orderData = collectFormData(UI); // v5.7.22: Injeta UI na função auxiliar
+            const orderData = collectFormData(UI); 
             orderData.mockupUrls.push(...newUrls);
             
             const orderId = UI.DOM.orderId.value;
-            // Salva o pedido primeiro para garantir que temos um ID
             const savedOrderId = await services.saveOrder(orderData, orderId); 
             
             // --- ETAPA 3: A LÓGICA DA "PONTE" FINANCEIRA ---
             const downPaymentAmount = parseFloat(orderData.downPayment) || 0;
             const clientName = orderData.clientName;
 
-            // Busca por uma transação de adiantamento JÁ VINCULADA a este pedido
             const existingTransaction = await services.getTransactionByOrderId(savedOrderId);
 
-            // Cenário A: O usuário inseriu um valor de adiantamento
             if (downPaymentAmount > 0) {
-                // Monta o objeto da transação
                 const transactionData = {
                     date: orderData.downPaymentDate,
                     description: `Adiantamento Pedido - ${clientName}`,
@@ -114,7 +113,7 @@ export function initializeOrderListeners(UI, deps) {
                     category: 'Adiantamento de Pedido', 
                     source: orderData.paymentFinSource,
                     status: orderData.paymentFinStatus,
-                    orderId: savedOrderId // O VÍNCULO SÊNIOR
+                    orderId: savedOrderId
                 };
                 
                 if (existingTransaction) {
@@ -126,7 +125,6 @@ export function initializeOrderListeners(UI, deps) {
                     await services.saveTransaction(transactionData, null);
                 }
             } 
-            // Cenário B: O usuário NÃO inseriu valor (ou zerou na edição)
             else {
                 if (existingTransaction) {
                     await services.deleteTransaction(existingTransaction.id);
@@ -134,7 +132,6 @@ export function initializeOrderListeners(UI, deps) {
             }
 
             // --- ETAPA 4: Feedback ---
-            // v5.7.6: Centralizado via modalHandler
             UI.hideOrderModal();
             
             if (orderData.orderStatus === 'Finalizado' || orderData.orderStatus === 'Entregue') {
@@ -153,7 +150,7 @@ export function initializeOrderListeners(UI, deps) {
 
         } catch (error) { 
             console.error("Erro ao salvar pedido:", error);
-            UI.showInfoModal('Ocorreu um erro ao salvar o pedido. Por favor, tente novamente.'); 
+            UI.showInfoModal('Ocorreu um erro ao salvar o pedido. Por favor, verifique os dados e tente novamente.'); 
         } finally { 
             UI.DOM.saveBtn.disabled = false; 
             UI.DOM.uploadIndicator.classList.add('hidden'); 
@@ -177,7 +174,6 @@ export function initializeOrderListeners(UI, deps) {
             partCounter = UI.populateFormForEdit(order, partCounter);
             setState({ partCounter });
             
-            // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
             UI.showOrderModal();
             
         } else if (btn.classList.contains('replicate-btn')) {
@@ -186,7 +182,6 @@ export function initializeOrderListeners(UI, deps) {
             partCounter = UI.populateFormForEdit(order, partCounter);
             setState({ partCounter });
             
-            // Resetar campos para modo de replicação
             UI.DOM.orderId.value = ''; 
             UI.DOM.modalTitle.textContent = 'Novo Pedido (Replicado)';
             UI.DOM.orderStatus.value = 'Pendente'; 
@@ -196,12 +191,10 @@ export function initializeOrderListeners(UI, deps) {
             UI.DOM.downPayment.value = '';
             UI.updateFinancials();
             
-            // v5.0: Reseta os campos financeiros da ponte para o padrão
             UI.DOM.downPaymentDate.value = new Date().toISOString().split('T')[0];
             UI.DOM.downPaymentStatusPago.checked = true;
             UI.updateSourceSelectionUI(UI.DOM.downPaymentSourceContainer, 'banco');
             
-            // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
             UI.showOrderModal();
             
         } else if (btn.classList.contains('delete-btn')) {
@@ -219,14 +212,9 @@ export function initializeOrderListeners(UI, deps) {
               });
         } else if (btn.classList.contains('view-btn')) {
             UI.viewOrder(order);
-            
-            // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
             UI.showViewModal();
             
         } else if (btn.classList.contains('settle-and-deliver-btn')) {
-            // ========================================================
-            // INÍCIO DA LÓGICA DE QUITAÇÃO v4.2.7
-            // ========================================================
             try {
                 let totalValue = 0;
                 (order.parts || []).forEach(p => {
@@ -299,9 +287,6 @@ export function initializeOrderListeners(UI, deps) {
                 console.error("Erro ao quitar e entregar pedido:", error);
                 UI.showInfoModal("Ocorreu um erro ao atualizar o pedido.");
             }
-            // ========================================================
-            // FIM DA LÓGICA DE QUITAÇÃO
-            // ========================================================
         }
     });
 
@@ -310,7 +295,6 @@ export function initializeOrderListeners(UI, deps) {
         if (!btn) return;
 
         if (btn.id === 'closeViewBtn') { 
-            // v5.7.6: Centralizado via modalHandler
             UI.hideViewModal();
             UI.DOM.viewModal.innerHTML = ''; 
         }
@@ -320,7 +304,6 @@ export function initializeOrderListeners(UI, deps) {
     });
 
     // --- Interações dentro do Modal de Pedidos ---
-    // v5.7.6: Centralizado via modalHandler
     UI.DOM.cancelBtn.addEventListener('click', () => UI.hideOrderModal());
     
     UI.DOM.addPartBtn.addEventListener('click', () => { 
@@ -337,9 +320,8 @@ export function initializeOrderListeners(UI, deps) {
      e.target.value = UI.formatPhoneNumber(e.target.value);
     });
 
-    // Listener delegado para o modal de pedido (Opções, Mockups, Fonte de Pagamento)
+    // Listener delegado para o modal de pedido
     UI.DOM.orderModal.addEventListener('click', (e) => {
-        // Gerenciador de Opções (Peça/Material)
         const optionsBtn = e.target.closest('button.manage-options-btn'); 
         if (optionsBtn) { 
             const currentOptionType = optionsBtn.dataset.type;
@@ -347,13 +329,11 @@ export function initializeOrderListeners(UI, deps) {
             UI.openOptionsModal(currentOptionType, getOptionsFromStorage(currentOptionType)); 
         }
         
-        // Gerenciador de Arquivos
         const removeMockupBtn = e.target.closest('.remove-mockup-btn');
         if (removeMockupBtn) {
             removeMockupBtn.parentElement.remove(); 
         }
         
-        // Gerenciador do seletor de Origem (Banco/Caixa)
         const sourceBtn = e.target.closest('#downPaymentSourceContainer .source-selector');
         if (sourceBtn) {
             UI.updateSourceSelectionUI(UI.DOM.downPaymentSourceContainer, sourceBtn.dataset.source);
