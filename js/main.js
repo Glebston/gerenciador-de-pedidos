@@ -119,34 +119,24 @@ async function main() {
                 initializeAndPopulateDatalists(); 
                 UI.updateNavButton(currentDashboardView);
                 
-                // --- TORNAR APP VISÍVEL ---
-                UI.DOM.authContainer.classList.add('hidden');
-                
-                // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.42 (Tentativa #22 - "Sync Pipeline")
-                // ========================================================
-                // Diagnóstico: O layout não estava pronto (rasterizado/painted)
-                // quando checkBackupReminder() rodava, mesmo com delays.
-                // Solução: Usar requestAnimationFrame aninhado para garantir
-                // que o navegador terminou a composição da tela antes de agir.
+                // --- TORNAR APP VISÍVEL (PIPELINE SINCRONIZADO v5.7.42) ---
+                // Usa setTimeout + Double rAF para garantir que o DOM esteja
+                // pintado e estável antes de disparar o checkBackupReminder.
 
                 setTimeout(() => {
-                    // 1. Remove o hidden, permitindo que o navegador *comece* a calcular o layout
+                    // 1. Remove o hidden, permitindo que o navegador comece a calcular o layout
                     UI.DOM.app.classList.remove('hidden');
 
                     // 2. Primeiro rAF: Espera o navegador agendar a próxima pintura
                     requestAnimationFrame(() => {
                         // 3. Segundo rAF: Garante que a pintura anterior foi concluída
-                        // e o layout está 100% estável.
+                        // e o layout está 100% estável (Render Queue limpa).
                         requestAnimationFrame(() => {
                             // 4. Agora é seguro manipular a animação do banner
                             checkBackupReminder();
                         });
                     });
                 }, 0);
-                // ========================================================
-                // FIM DA CORREÇÃO v5.7.42
-                // ========================================================
 
             } else {
                 UI.showInfoModal("Erro: Usuário não associado a nenhuma empresa. Fale com o suporte.");
@@ -363,7 +353,7 @@ async function main() {
         };
 
         const triggerAutoBackupIfNeeded = () => {
-            // ... (código permanece, mas não é chamado)
+            // (Função preservada para referência futura, mas não chamada diretamente nesta versão)
             const key = `lastAutoBackupTimestamp_${userCompanyId}`;
             const lastBackup = localStorage.getItem(key);
             if (!lastBackup) return;
@@ -374,6 +364,12 @@ async function main() {
             }
         };
 
+        // ========================================================
+        // CORREÇÃO v5.7.50: LÓGICA DEFINITIVA DO BANNER
+        // ========================================================
+        // Substitui completamente as tentativas anteriores (v5.7.38/41).
+        // Funciona em harmonia com o Pipeline Sincronizado (rAF) da initializeAppLogic.
+        
         const checkBackupReminder = () => {
             const key = `lastAutoBackupTimestamp_${userCompanyId}`;
             const lastBackup = localStorage.getItem(key);
@@ -382,48 +378,31 @@ async function main() {
             let needsReminder = false;
             
             if (!lastBackup) {
-                // Caso 1: Nunca fez backup
                 needsReminder = true;
             } else {
-                // Caso 2: O backup está antigo
                 if ((Date.now() - parseInt(lastBackup)) > sevenDaysInMillis) {
                     needsReminder = true;
                 }
             }
 
             if (needsReminder) {
-                // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.41 (Tentativa #21 - A Combinação)
-                // ========================================================
-                // Diagnóstico: Combinar as duas melhores tentativas.
-                // 1. O 'setTimeout(150)' (v5.7.39) limpa a fila de renderização.
-                // 2. O 'offsetWidth' (v5.7.38) força a animação.
-                //
-                // Solução: RESTAURAR a lógica v5.7.38 ("Forced Reflow"),
-                // que agora será executada com a fila "limpa".
-                
                 const banner = UI.DOM.backupReminderBanner;
 
-                // Ação 1 (Tick 1):
-                // Garante que o banner esteja visível (remove .hidden)
-                // E remove a classe de animação (.toast-enter).
+                // Passo 1: Estado Inicial
+                // Removemos .hidden para que o elemento exista no layout.
+                // Removemos .toast-enter para garantir que ele comece "sem animação".
                 banner.classList.remove('hidden');
                 banner.classList.remove('toast-enter');
 
-                // Ação 2 (Forçar Reflow):
-                // Ao ler a propriedade 'offsetWidth', forçamos o navegador
-                // a parar o JS e calcular/pintar o layout do banner
-                // no estado da Ação 1 (visível, sem animação).
+                // Passo 2: Forçar Reflow (Cálculo de Layout)
+                // Ao ler o offsetWidth, obrigamos o navegador a processar o estado atual
+                // (visível, mas sem a classe de animação) ANTES de prosseguir.
                 void banner.offsetWidth;
 
-                // Ação 3 (Tick 2):
-                // Agora, no próximo quadro de pintura (após o reflow),
-                // o navegador vê a *adição* da classe '.toast-enter'
-                // e finalmente dispara a animação de fade-in.
+                // Passo 3: Disparar Animação
+                // Agora que o layout base está calculado, adicionamos a classe.
+                // A transição CSS vai ocorrer suavemente.
                 banner.classList.add('toast-enter');
-                // ========================================================
-                // FIM DA CORREÇÃO v5.7.41
-                // ========================================================
             }
         };
 
@@ -435,13 +414,6 @@ async function main() {
         // Delega a anexação de todos os event listeners para módulos especialistas,
         // injetando as dependências necessárias (handlers, serviços e estado).
         
-        // ========================================================
-        // INÍCIO DA CORREÇÃO v5.7.22
-        // ========================================================
-        // O objeto 'UI' (carregado dinamicamente) é agora injetado 
-        // em TODOS os módulos de listener para resolver o conflito
-        // de importação estática vs. dinâmica ("célebro dividido").
-
         initializeAuthListeners(UI);
 
         initializeNavigationListeners(UI, {
@@ -509,9 +481,6 @@ async function main() {
             },
             getState: () => ({ currentOptionType })
         });
-        // ========================================================
-        // FIM DA CORREÇÃO v5.7.22
-        // ========================================================
 
     } catch (error) {
         console.error("Falha crítica ao inicializar o PagLucro Gestor:", error);
