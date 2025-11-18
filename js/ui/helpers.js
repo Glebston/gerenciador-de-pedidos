@@ -1,5 +1,5 @@
 // ==========================================================
-// MÓDULO UI HELPERS (v4.3.0)
+// MÓDULO UI HELPERS (v4.3.0 - Patch v5.8.1)
 // Responsabilidade: Fornecer funções "ajudantes"
 // genéricas usadas por outros módulos da UI.
 // (Ex: formatar telefone, atualizar botões, etc.)
@@ -35,8 +35,15 @@ export const updateSourceSelectionUI = (container, selectedSource) => {
     container.querySelectorAll('.source-selector').forEach(btn => {
         const isSelected = btn.dataset.source === selectedSource;
         btn.classList.toggle('active', isSelected);
+        
+        // === CORREÇÃO v5.8.1 (Blindagem) ===
+        // Verifica se o elemento de ícone existe antes de tentar manipulá-lo.
+        // Isso permite usar essa função tanto no Modal de Pedidos (com ícone)
+        // quanto no Modal de Transações (sem ícone).
         const iconPlaceholder = btn.querySelector('.icon-placeholder');
-        iconPlaceholder.innerHTML = isSelected ? CHECK_ICON_SVG : '';
+        if (iconPlaceholder) {
+            iconPlaceholder.innerHTML = isSelected ? CHECK_ICON_SVG : '';
+        }
     });
 };
 
