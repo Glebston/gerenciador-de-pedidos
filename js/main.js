@@ -123,27 +123,29 @@ async function main() {
                 UI.DOM.authContainer.classList.add('hidden');
                 
                 // ========================================================
-                // INÍCIO DA CORREÇÃO v5.7.41 (Tentativa #21 - A Combinação)
+                // INÍCIO DA CORREÇÃO v5.7.42 (Tentativa #22 - "Sync Pipeline")
                 // ========================================================
-                // Mantém a lógica da v5.7.39
-                
-                // Tarefa 1 (Tick 2): Mostrar o App imediatamente.
+                // Diagnóstico: O layout não estava pronto (rasterizado/painted)
+                // quando checkBackupReminder() rodava, mesmo com delays.
+                // Solução: Usar requestAnimationFrame aninhado para garantir
+                // que o navegador terminou a composição da tela antes de agir.
+
                 setTimeout(() => {
+                    // 1. Remove o hidden, permitindo que o navegador *comece* a calcular o layout
                     UI.DOM.app.classList.remove('hidden');
-                }, 0); 
-                
-                // Tarefa 2 (Tick 3, Atrasado): Mostrar o Banner.
-                // Damos 150ms para o navegador terminar de pintar
-                // os dashboards (tarefa pesada) antes de tentarmos
-                // disparar a animação (tarefa leve).
-                setTimeout(() => {
-                    // Esta função agora executa a lógica
-                    // "Forced Reflow" (v5.7.38) em uma
-                    // fila de renderização "limpa".
-                    checkBackupReminder();
-                }, 150); // Delay de segurança
+
+                    // 2. Primeiro rAF: Espera o navegador agendar a próxima pintura
+                    requestAnimationFrame(() => {
+                        // 3. Segundo rAF: Garante que a pintura anterior foi concluída
+                        // e o layout está 100% estável.
+                        requestAnimationFrame(() => {
+                            // 4. Agora é seguro manipular a animação do banner
+                            checkBackupReminder();
+                        });
+                    });
+                }, 0);
                 // ========================================================
-                // FIM DA CORREÇÃO v5.7.41
+                // FIM DA CORREÇÃO v5.7.42
                 // ========================================================
 
             } else {
