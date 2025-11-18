@@ -124,7 +124,8 @@ async function main() {
                 // pintado e estável antes de disparar o checkBackupReminder.
 
                 setTimeout(() => {
-                    // 1. Remove o hidden, permitindo que o navegador comece a calcular o layout
+                    // 1. Oculta o Login e Remove o hidden do App, permitindo que o navegador comece a calcular o layout
+                    UI.DOM.authContainer.classList.add('hidden'); // <--- CORREÇÃO AQUI
                     UI.DOM.app.classList.remove('hidden');
 
                     // 2. Primeiro rAF: Espera o navegador agendar a próxima pintura
