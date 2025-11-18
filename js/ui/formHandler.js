@@ -1,14 +1,13 @@
 // ==========================================================
-// MÓDULO FORM HANDLER (v4.5.0-b)
+// MÓDULO FORM HANDLER (v4.5.2 - Patch Final Blindagem)
 // Responsabilidade: Gerenciar toda a lógica interna do
-// modal de Pedidos (adicionar peças, calcular totais,
-// popular para edição, resetar).
+// modal de Pedidos.
 // ==========================================================
 
 import { DOM } from './dom.js';
 
-// Importa helpers do "gerente" ui.js (que serão movidos no futuro)
-import { updateSourceSelectionUI } from '../ui.js';
+// CORREÇÃO v4.5.1: Importar direto do especialista para evitar Dependência Circular
+import { updateSourceSelectionUI } from './helpers.js';
 
 export const updateFinancials = () => {
     let subtotal = 0;
@@ -45,17 +44,12 @@ const createFinancialRow = (partId, name, quantity, priceGroup) => {
 };
 
 export const renderFinancialSection = () => {
-    // ==========================================================
-    // INÍCIO DA CORREÇÃO v4.2.6: Preservar preços unitários ao mudar quantidade
-    // ==========================================================
-    
-    // 1. Salva os preços unitários existentes antes de limpar o DOM
     const existingPrices = new Map();
     DOM.financialsContainer.querySelectorAll('.financial-item').forEach(item => {
         const partId = item.dataset.partId;
         const priceGroup = item.dataset.priceGroup;
         const price = item.querySelector('.financial-price').value;
-        if (price) { // Salva apenas se houver um valor
+        if (price) { 
             existingPrices.set(`${partId}-${priceGroup}`, price);
         }
     });
@@ -76,42 +70,28 @@ export const renderFinancialSection = () => {
 
             if (standardQty > 0) {
                 const finRow = createFinancialRow(partId, partName, standardQty, 'standard');
-                // 2. Reaplica o preço salvo, se existir
                 const key = `${partId}-standard`;
-                if (existingPrices.has(key)) {
-                    finRow.querySelector('.financial-price').value = existingPrices.get(key);
-                }
+                if (existingPrices.has(key)) finRow.querySelector('.financial-price').value = existingPrices.get(key);
                 DOM.financialsContainer.appendChild(finRow);
             }
             if (specificQty > 0) {
                 const finRow = createFinancialRow(partId, partName, specificQty, 'specific');
-                // 2. Reaplica o preço salvo, se existir
                 const key = `${partId}-specific`;
-                if (existingPrices.has(key)) {
-                    finRow.querySelector('.financial-price').value = existingPrices.get(key);
-                }
+                if (existingPrices.has(key)) finRow.querySelector('.financial-price').value = existingPrices.get(key);
                 DOM.financialsContainer.appendChild(finRow);
             }
         } else { // 'detalhado'
             const totalQty = partItem.querySelectorAll('.detailed-item-row').length;
             if (totalQty > 0) {
                 const finRow = createFinancialRow(partId, partName, totalQty, 'detailed');
-                // 2. Reaplica o preço salvo, se existir
                 const key = `${partId}-detailed`;
-                if (existingPrices.has(key)) {
-                    finRow.querySelector('.financial-price').value = existingPrices.get(key);
-                }
+                if (existingPrices.has(key)) finRow.querySelector('.financial-price').value = existingPrices.get(key);
                 DOM.financialsContainer.appendChild(finRow);
             }
         }
     });
     
-    // 3. Recalcula o total (que já era chamado)
     updateFinancials();
-    
-    // ==========================================================
-    // FIM DA CORREÇÃO v4.2.6
-    // ==========================================================
 };
 
 const addContentToPart = (partItem, partData = {}) => {
@@ -127,6 +107,10 @@ const addContentToPart = (partItem, partData = {}) => {
         const comumTpl = document.getElementById('comumPartContentTemplate').content.cloneNode(true);
         
         const sizesGrid = comumTpl.querySelector('.sizes-grid');
+        
+        // CORREÇÃO VISUAL v4.5.1: 
+        sizesGrid.className = 'sizes-grid hidden mt-3 space-y-4';
+
         const categories = {
             'Baby Look': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
             'Normal': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
@@ -134,13 +118,17 @@ const addContentToPart = (partItem, partData = {}) => {
         };
         let gridHtml = '';
         for (const category in categories) {
-            gridHtml += `<div class="p-3 border rounded-md bg-white"><h4 class="font-semibold mb-2">${category}</h4><div class="grid grid-cols-3 sm:grid-cols-6 gap-4 justify-start">`;
+            gridHtml += `
+            <div class="p-3 border rounded-md bg-white shadow-sm">
+                <h4 class="font-bold text-gray-600 mb-3 text-sm uppercase tracking-wide border-b pb-1">${category}</h4>
+                <div class="grid grid-cols-3 sm:grid-cols-6 gap-3 justify-start">`;
+            
             categories[category].forEach(size => {
                 const value = partData.sizes?.[category]?.[size] || '';
                 gridHtml += `
-                    <div class="size-input-container">
-                        <label class="text-sm font-medium mb-1">${size}</label>
-                        <input type="number" data-category="${category}" data-size="${size}" value="${value}" class="p-2 border rounded-md w-full text-center size-input">
+                    <div class="size-input-container flex flex-col items-center">
+                        <label class="text-xs font-bold text-gray-500 mb-1">${size}</label>
+                        <input type="number" data-category="${category}" data-size="${size}" value="${value}" class="p-2 border border-gray-300 rounded-md w-full text-center size-input focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 focus:bg-white transition-colors">
                     </div>`;
             });
             gridHtml += '</div></div>';
@@ -172,15 +160,10 @@ const addContentToPart = (partItem, partData = {}) => {
         contentContainer.appendChild(comumTpl);
 
     } else { // 'detalhado'
-        // ==========================================================
-        // INÍCIO DA ALTERAÇÃO v4.5.0-b
-        // ==========================================================
         const detalhadoTpl = document.getElementById('detalhadoPartContentTemplate').content.cloneNode(true);
         const listContainer = detalhadoTpl.querySelector('.detailed-items-list');
         const gridContainer = detalhadoTpl.querySelector('.detailed-sizes-grid-container');
         
-        // --- 1. Helper `addRow` modificado ---
-        // Agora aceita um tamanho pré-preenchido e o torna readonly
         const addRow = (detail = {}, prefilledSize = null) => {
             const row = document.createElement('div');
             row.className = 'grid grid-cols-12 gap-2 items-center detailed-item-row';
@@ -192,7 +175,7 @@ const addContentToPart = (partItem, partData = {}) => {
                 <div class="col-span-5"><input type="text" placeholder="Nome na Peça" class="p-1 border rounded-md w-full text-sm item-det-name" value="${detail.name || ''}"></div>
                 <div class="col-span-4"><input type="text" placeholder="Tamanho" class="p-1 border rounded-md w-full text-sm item-det-size" value="${sizeValue}" ${isReadonly}></div>
                 <div class="col-span-2"><input type="text" placeholder="Nº" class="p-1 border rounded-md w-full text-sm item-det-number" value="${detail.number || ''}"></div>
-                <div classcol-span-1 flex justify-center"><button type="button" class="remove-detailed-row text-red-500 font-bold">&times;</button></div>`;
+                <div class="col-span-1 flex justify-center"><button type="button" class="remove-detailed-row text-red-500 font-bold hover:text-red-700">&times;</button></div>`;
             
             row.querySelector('.remove-detailed-row').addEventListener('click', () => {
                 row.remove();
@@ -201,88 +184,64 @@ const addContentToPart = (partItem, partData = {}) => {
             listContainer.appendChild(row);
         };
 
-        // --- 2. Construção da Grade de Tamanhos ---
-        // Reutiliza a mesma estrutura de categorias do modo 'comum'
         const categories = {
             'Baby Look': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
             'Normal': ['PP', 'P', 'M', 'G', 'GG', 'XG'],
             'Infantil': ['2 anos', '4 anos', '6 anos', '8 anos', '10 anos', '12 anos']
         };
+        
         let gridHtml = '<div class="space-y-4">';
         for (const category in categories) {
-            gridHtml += `<div class=""><h4 class="font-semibold mb-2">${category}</h4><div class="grid grid-cols-3 sm:grid-cols-6 gap-4 justify-start">`;
+            gridHtml += `
+            <div class="bg-slate-50 p-2 rounded border border-slate-200">
+                <h4 class="font-bold text-xs text-gray-500 uppercase mb-2">${category}</h4>
+                <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 justify-start">`;
             categories[category].forEach(size => {
-                // Nota: Usamos 'detailed-size-input' para diferenciar dos inputs do modo 'comum'
                 gridHtml += `
                     <div class="size-input-container">
-                        <label class="text-sm font-medium mb-1">${size}</label>
-                        <input type="number" data-category="${category}" data-size="${size}" class="p-2 border rounded-md w-full text-center detailed-size-input">
+                        <label class="text-xs font-medium mb-1 text-gray-400">${size}</label>
+                        <input type="number" data-category="${category}" data-size="${size}" class="p-1 border rounded-md w-full text-center detailed-size-input text-sm">
                     </div>`;
             });
             gridHtml += '</div></div>';
         }
         gridHtml += '</div>';
-        gridContainer.innerHTML += gridHtml; // Adiciona a grade ao container
+        gridContainer.innerHTML += gridHtml; 
         
-        // --- 3. Lógica de Edição vs. Novo ---
-        // Se estamos editando (partData.details existe e tem itens), mostramos a lista e escondemos a grade.
         if (partData.details && partData.details.length > 0) {
-            partData.details.forEach(detail => addRow(detail, null)); // Popula com dados existentes
-            
-            // Esconde a UI de geração
+            partData.details.forEach(detail => addRow(detail, null)); 
             gridContainer.classList.add('hidden');
             detalhadoTpl.querySelector('.generate-detailed-lines-btn').classList.add('hidden');
-            
-            // Mostra a lista
             detalhadoTpl.querySelector('.detailed-list-wrapper').classList.remove('hidden');
-            
-        } else {
-            // Se for novo, a grade já está visível por padrão (HTML) e a lista escondida.
-            // Não precisamos fazer nada.
         }
 
-        // --- 4. Listeners dos Botões ---
-        
-        // Listener para o botão "Gerar Linhas"
         detalhadoTpl.querySelector('.generate-detailed-lines-btn').addEventListener('click', (e) => {
-            const partItem = e.target.closest('.part-item'); // Encontra o 'part-item' pai
+            const partItem = e.target.closest('.part-item'); 
             if (!partItem) return;
 
-            // Limpa a lista (exceto o header) antes de adicionar novas linhas
             listContainer.querySelectorAll('.detailed-item-row').forEach(row => row.remove());
 
             partItem.querySelectorAll('.detailed-size-input').forEach(input => {
                 const quantity = parseInt(input.value) || 0;
                 if (quantity > 0) {
                     const { category, size } = input.dataset;
-                    const prefilledSize = `${size} (${category})`; // Ex: "M (Baby Look)"
-                    
-                    for (let i = 0; i < quantity; i++) {
-                        addRow({}, prefilledSize); // Adiciona a linha com o tamanho pré-preenchido
-                    }
+                    const prefilledSize = `${size} (${category})`; 
+                    for (let i = 0; i < quantity; i++) addRow({}, prefilledSize); 
                 }
             });
 
-            renderFinancialSection(); // Atualiza o financeiro
-            
-            // Esconde a UI de geração
+            renderFinancialSection(); 
             partItem.querySelector('.detailed-sizes-grid-container').classList.add('hidden');
-            e.target.classList.add('hidden'); // Esconde o próprio botão
-            
-            // Mostra a lista de itens
+            e.target.classList.add('hidden'); 
             partItem.querySelector('.detailed-list-wrapper').classList.remove('hidden');
         });
 
-        // Listener para o botão "+ Linha Manual" (que está dentro da lista)
         detalhadoTpl.querySelector('.add-manual-detailed-row-btn').addEventListener('click', () => {
-            addRow({}, null); // Adiciona uma linha manual (sem pré-preenchimento)
+            addRow({}, null); 
             renderFinancialSection();
         });
         
         contentContainer.appendChild(detalhadoTpl);
-        // ==========================================================
-        // FIM DA ALTERAÇÃO v4.5.0-b
-        // ==========================================================
     }
 };
 
@@ -327,7 +286,6 @@ export const resetForm = () => {
     DOM.existingFilesContainer.innerHTML = '';
     DOM.orderDate.value = new Date().toISOString().split('T')[0];
     
-    // v5.0: Define padrões para os novos campos da "Ponte"
     DOM.downPaymentDate.value = new Date().toISOString().split('T')[0];
     DOM.downPaymentStatusPago.checked = true;
     updateSourceSelectionUI(DOM.downPaymentSourceContainer, 'banco');
@@ -348,14 +306,16 @@ export const populateFormForEdit = (orderData, currentPartCounter) => {
     DOM.generalObservation.value = orderData.generalObservation;
     DOM.downPayment.value = orderData.downPayment || '';
     DOM.discount.value = orderData.discount || '';
-    DOM.paymentMethod.value = orderData.paymentMethod || '';
     
-    // v5.0: Popula os novos campos da "Ponte"
+    // CORREÇÃO v4.5.2: Blindagem do campo paymentMethod, que pode ser NULL no DOM.
+    if (DOM.paymentMethod) {
+        DOM.paymentMethod.value = orderData.paymentMethod || '';
+    }
+    
     DOM.downPaymentDate.value = orderData.downPaymentDate || new Date().toISOString().split('T')[0];
     const finStatus = orderData.paymentFinStatus || 'pago';
     (finStatus === 'a_receber' ? DOM.downPaymentStatusAReceber : DOM.downPaymentStatusPago).checked = true;
     updateSourceSelectionUI(DOM.downPaymentSourceContainer, orderData.paymentFinSource || 'banco');
-
 
     DOM.existingFilesContainer.innerHTML = '';
     if (orderData.mockupUrls && orderData.mockupUrls.length) {
