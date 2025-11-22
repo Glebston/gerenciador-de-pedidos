@@ -1,12 +1,10 @@
 // js/listeners/financeListeners.js
-
-// v5.7.22: REMOVIDA importação estática de UI.
-// import * as UI from '../ui.js';
+// ==========================================================
+// MÓDULO FINANCE LISTENERS (v5.8.4 - SYNC & CALCULATION FIX)
+// ==========================================================
 
 /**
  * Lida com a lógica de preenchimento do modal para editar uma transação.
- * (Anteriormente em main.js)
- * v5.7.22: 'UI' agora é injetado nesta função auxiliar.
  * @param {object} UI - O módulo UI (injetado)
  * @param {string} id - O ID da transação.
  * @param {Function} getTransactions - A função getAllTransactions.
@@ -15,15 +13,6 @@ function handleEditTransaction(UI, id, getTransactions) {
     const transaction = getTransactions().find(t => t.id === id);
     if (!transaction) return;
     
-    // v5.7.1: Bloco removido. 
-    // A edição agora é permitida mesmo para transações vinculadas a pedidos.
-    /*
-    if (transaction.orderId) {
-        UI.showInfoModal("Este lançamento foi gerado por um pedido e não pode ser editado manualmente. Por favor, edite o pedido correspondente.");
-        return;
-    }
-    */
-
     UI.DOM.transactionId.value = transaction.id; 
     UI.DOM.transactionDate.value = transaction.date; 
     UI.DOM.transactionDescription.value = transaction.description;
@@ -41,18 +30,13 @@ function handleEditTransaction(UI, id, getTransactions) {
     
     UI.DOM.transactionModalTitle.textContent = isIncome ? 'Editar Entrada' : 'Editar Despesa';
     
-    // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
     UI.showTransactionModal();
 }
 
 /**
  * Inicializa todos os event listeners relacionados ao Dashboard Financeiro.
- * v5.7.22: A função agora recebe o módulo 'UI' injetado pelo main.js.
  * @param {object} UI - O módulo UI (injetado)
  * @param {object} deps - Dependências injetadas
- * @param {object} deps.services - Funções de serviço (saveTransaction, etc.)
- * @param {Function} deps.getConfig - Getter para userBankBalanceConfig
- * @param {Function} deps.setConfig - Setter para userBankBalanceConfig (para atualizar o initialBalance)
  */
 export function initializeFinanceListeners(UI, deps) {
 
@@ -69,7 +53,6 @@ export function initializeFinanceListeners(UI, deps) {
         UI.DOM.pago.checked = true; 
         UI.updateSourceSelectionUI(UI.DOM.transactionSourceContainer, 'banco'); 
         
-        // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
         UI.showTransactionModal();
     });
 
@@ -82,7 +65,6 @@ export function initializeFinanceListeners(UI, deps) {
         UI.DOM.transactionStatusContainer.classList.add('hidden'); 
         UI.updateSourceSelectionUI(UI.DOM.transactionSourceContainer, 'banco'); 
         
-        // v5.7.6: Centralizado via modalHandler para aplicar o remendo de z-index
         UI.showTransactionModal();
     });
 
@@ -110,9 +92,27 @@ export function initializeFinanceListeners(UI, deps) {
             return;
         }
         try {
-            await services.saveTransaction(data, UI.DOM.transactionId.value);
+            const transactionId = UI.DOM.transactionId.value;
             
-            // v5.7.6: Centralizado via modalHandler
+            // LÓGICA DE SINCRONIZAÇÃO DE DESCONTO
+            if (transactionId && services.getTransactionById && services.updateOrderDiscountFromFinance) {
+                const originalTransaction = services.getTransactionById(transactionId);
+
+                // Verifica se tem vínculo com pedido
+                if (originalTransaction && originalTransaction.orderId) {
+                    const oldAmount = parseFloat(originalTransaction.amount) || 0;
+                    const newAmount = data.amount;
+                    const diff = newAmount - oldAmount;
+
+                    // Se o valor mudou significativamente, atualiza o pedido
+                    if (Math.abs(diff) > 0.001) {
+                        await services.updateOrderDiscountFromFinance(originalTransaction.orderId, diff);
+                    }
+                }
+            }
+
+            await services.saveTransaction(data, transactionId);
+            
             UI.hideTransactionModal();
 
         } catch (error) {
@@ -121,7 +121,6 @@ export function initializeFinanceListeners(UI, deps) {
         }
     });
 
-    // v5.7.6: Adicionado listener para o botão Cancelar
     UI.DOM.cancelTransactionBtn.addEventListener('click', () => {
         UI.hideTransactionModal();
     });
@@ -133,20 +132,8 @@ export function initializeFinanceListeners(UI, deps) {
         
         const id = btn.dataset.id;
         if (btn.classList.contains('edit-transaction-btn')) {
-            // v5.7.22: Injeta a UI na função auxiliar
             handleEditTransaction(UI, id, services.getAllTransactions);
         } else if (btn.classList.contains('delete-transaction-btn')) {
-            
-            // v5.7.1: Bloco removido.
-            // A exclusão agora é permitida mesmo para transações vinculadas a pedidos.
-            /*
-            const transaction = services.getAllTransactions().find(t => t.id === id);
-            if (transaction && transaction.orderId) {
-                UI.showInfoModal("Este lançamento foi gerado por um pedido e não pode ser excluído manualmente. Por favor, edite o pedido correspondente.");
-                return;
-            }
-            */
-            
             UI.showConfirmModal("Tem certeza que deseja excluir este lançamento?", "Excluir", "Cancelar")
               .then(ok => ok && services.deleteTransaction(id));
         } else if (btn.classList.contains('mark-as-paid-btn')) {
@@ -155,7 +142,49 @@ export function initializeFinanceListeners(UI, deps) {
     });
 
     // --- Filtros do Dashboard Financeiro ---
-    const renderFullDashboard = () => UI.renderFinanceDashboard(services.getAllTransactions(), getConfig());
+    
+    // Debounce para inputs de texto (Search e Datas Customizadas)
+    // Isso evita que o cálculo seja disparado a cada tecla, dando tempo para o valor estabilizar
+    let filterDebounceTimeout;
+
+    const renderFullDashboard = () => {
+        // 1. Determina as datas do filtro para passar ao cálculo de pedidos
+        const filter = UI.DOM.periodFilter ? UI.DOM.periodFilter.value : 'thisMonth';
+        const now = new Date();
+        let startDate = null, endDate = null;
+
+        if (filter === 'custom') {
+            if (UI.DOM.startDateInput.value) startDate = new Date(UI.DOM.startDateInput.value + 'T00:00:00');
+            if (UI.DOM.endDateInput.value) endDate = new Date(UI.DOM.endDateInput.value + 'T23:59:59');
+        } else {
+            const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+            const startOfThisYear = new Date(now.getFullYear(), 0, 1);
+            const endOfThisYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+
+            switch(filter) {
+                case 'thisMonth': startDate = startOfThisMonth; endDate = endOfThisMonth; break;
+                case 'lastMonth': startDate = startOfLastMonth; endDate = endOfLastMonth; break;
+                case 'thisYear': startDate = startOfThisYear; endDate = endOfThisYear; break;
+            }
+        }
+        
+        // Fallback de Segurança se as datas não estiverem definidas (assume mês atual)
+        if (!startDate || !endDate) {
+             startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+             endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        }
+
+        // 2. Busca o valor atualizado das pendências de pedidos FILTRADO PELA DATA
+        // Adiciona log para debug se necessário
+        const pendingRevenue = services.calculateTotalPendingRevenue 
+            ? services.calculateTotalPendingRevenue(startDate, endDate) 
+            : 0;
+            
+        UI.renderFinanceDashboard(services.getAllTransactions(), getConfig(), pendingRevenue);
+    };
 
     UI.DOM.periodFilter.addEventListener('change', () => { 
         UI.DOM.customPeriodContainer.classList.toggle('hidden', UI.DOM.periodFilter.value !== 'custom'); 
@@ -163,7 +192,12 @@ export function initializeFinanceListeners(UI, deps) {
     });
 
     [UI.DOM.startDateInput, UI.DOM.endDateInput, UI.DOM.transactionSearchInput].forEach(element => {
-        if(element) element.addEventListener('input', renderFullDashboard);
+        if(element) {
+            element.addEventListener('input', () => {
+                clearTimeout(filterDebounceTimeout);
+                filterDebounceTimeout = setTimeout(renderFullDashboard, 300); // Espera 300ms antes de renderizar
+            });
+        }
     });
 
     // --- Ajuste de Saldo ---
@@ -179,9 +213,9 @@ export function initializeFinanceListeners(UI, deps) {
             return;
         }
         await services.saveInitialBalance(newBalance);
-        setConfig({ initialBalance: newBalance }); // Atualiza o estado local no main.js
+        setConfig({ initialBalance: newBalance }); 
         
-        renderFullDashboard(); // Renderiza KPIs e lista, pois o saldo em conta mudou
+        renderFullDashboard(); 
         UI.DOM.initialBalanceModal.classList.add('hidden');
     });
 
