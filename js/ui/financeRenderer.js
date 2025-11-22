@@ -1,16 +1,16 @@
+// js/ui/financeRenderer.js
 // ==========================================================
-// MÓDULO FINANCE RENDERER (v4.3.0)
-// Responsabilidade: Gerenciar a renderização de tudo 
-// relacionado ao Dashboard Financeiro: KPIs, Gráficos e 
-// a lista de transações.
+// MÓDULO FINANCE RENDERER (v5.17.0 - MEMORY-FIRST ARCHITECTURE)
 // ==========================================================
 
 import { DOM } from './dom.js';
 
-/**
- * Cria o HTML para uma única linha de transação (mas não a insere)
- * @returns {string} String HTML da <tr>
- */
+// --- ESTADO INTERNO DO RENDERIZADOR (Fonte da Verdade) ---
+// Em vez de ler o DOM (que pode ter lixo/placeholders), usamos memória.
+// null = sistema acabou de iniciar, não temos histórico.
+let internalPendingRevenueCache = null;
+let lastContextFilter = ''; 
+
 const generateTransactionRowHTML = (t) => {
     const isIncome = t.type === 'income';
     const isReceivable = isIncome && t.status === 'a_receber';
@@ -25,18 +25,15 @@ const generateTransactionRowHTML = (t) => {
     const isLinkedToOrder = !!t.orderId;
     let actionsHtml = '';
 
-    // v5.7.1: Permite "Receber" em qualquer transação "A Receber" (removido check !isLinkedToOrder)
     if (isReceivable) { 
         actionsHtml = `<button data-id="${t.id}" class="mark-as-paid-btn text-green-600 hover:underline text-sm font-semibold">Receber</button> `;
     }
 
-    // v5.7.1: Sempre exibe os botões de Editar/Excluir
     actionsHtml += `
         <button data-id="${t.id}" class="edit-transaction-btn text-blue-500 hover:underline text-sm">Editar</button>
         <button data-id="${t.id}" class="delete-transaction-btn text-red-500 hover:underline text-sm ml-2">Excluir</button>
     `;
 
-    // v5.7.1: Se estiver vinculado ao pedido, apenas adiciona uma tag visual, mas mantém os botões.
     if (isLinkedToOrder) {
         actionsHtml += `<span class="block text-xs text-gray-500 italic mt-1" title="Vinculado ao Pedido ID: ${t.orderId}">Lançado via Pedido</span>`;
     }
@@ -55,9 +52,6 @@ const generateTransactionRowHTML = (t) => {
     `;
 };
 
-/**
- * Adiciona uma linha de transação à tabela
- */
 export const addTransactionRow = (transaction) => {
     const tr = document.createElement('tr');
     tr.className = `border-b hover:bg-gray-50 ${transaction.status === 'a_receber' ? 'bg-yellow-50' : ''}`;
@@ -65,7 +59,6 @@ export const addTransactionRow = (transaction) => {
     tr.dataset.date = transaction.date;
     tr.innerHTML = generateTransactionRowHTML(transaction);
 
-    // Insere ordenado por data (mais novo primeiro)
     const allRows = Array.from(DOM.transactionsList.querySelectorAll('tr[data-id]'));
     let inserted = false;
     for (const existingRow of allRows) {
@@ -79,21 +72,15 @@ export const addTransactionRow = (transaction) => {
         DOM.transactionsList.appendChild(tr);
     }
     
-    // Remove placeholder se existir
     const placeholder = DOM.transactionsList.querySelector('.transactions-placeholder');
     if (placeholder) placeholder.remove();
 };
 
-/**
- * Atualiza uma linha de transação existente
- */
 export const updateTransactionRow = (transaction) => {
     const row = DOM.transactionsList.querySelector(`tr[data-id="${transaction.id}"]`);
     if (row) {
-        // Apenas atualiza o conteúdo e as classes
         row.className = `border-b hover:bg-gray-50 ${transaction.status === 'a_receber' ? 'bg-yellow-50' : ''}`;
         row.innerHTML = generateTransactionRowHTML(transaction);
-        // Remove e readiciona para garantir a ordenação correta
         const oldDate = row.dataset.date;
         if (transaction.date !== oldDate) {
             row.remove();
@@ -102,34 +89,33 @@ export const updateTransactionRow = (transaction) => {
     }
 };
 
-/**
- * Remove uma linha de transação da tabela
- */
 export const removeTransactionRow = (transactionId) => {
     const row = DOM.transactionsList.querySelector(`tr[data-id="${transactionId}"]`);
     if (row) {
         row.remove();
     }
-    
-    // Mostra placeholder se a lista ficar vazia
     if (DOM.transactionsList.children.length === 0) {
         showTransactionsPlaceholder(false);
     }
 };
 
-/**
- * Exibe a mensagem de "Nenhum lançamento"
- */
 const showTransactionsPlaceholder = (isSearch) => {
     const message = isSearch ? 'Nenhum lançamento encontrado para a busca.' : 'Nenhum lançamento encontrado para este período.';
     DOM.transactionsList.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-gray-500 transactions-placeholder">${message}</td></tr>`;
 };
 
-/**
- * Renderiza apenas os KPIs (cards superiores) do dashboard financeiro
- */
-export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
-    const filterValue = DOM.periodFilter.value;
+export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig, pendingOrdersValue = 0) => {
+    
+    // --- 1. DETECÇÃO DE MUDANÇA DE CONTEXTO ---
+    const filterValue = DOM.periodFilter ? DOM.periodFilter.value : 'thisMonth';
+    
+    // Se o filtro mudou, resetamos o cache interno. 
+    // Isso impede que um valor de "Janeiro" proteja um zero de "Fevereiro".
+    if (filterValue !== lastContextFilter) {
+        internalPendingRevenueCache = null;
+        lastContextFilter = filterValue;
+    }
+
     const now = new Date();
     let startDate, endDate;
 
@@ -151,25 +137,28 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
         }
     }
     
+    if (!startDate || !endDate) {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    }
+
     const filteredTransactions = allTransactions.filter(t => {
         const transactionDate = new Date(t.date + 'T00:00:00');
         if (startDate && endDate) return transactionDate >= startDate && transactionDate <= endDate;
-        if(startDate && !endDate) return transactionDate >= startDate;
-        if(!startDate && endDate) return transactionDate <= endDate;
         return true;
     });
 
-    // v4.2.5: Separação de bankFlow e cashFlow
-    let faturamentoBruto = 0, despesasTotais = 0, contasARReceber = 0, valorRecebido = 0;
-    let bankFlow = 0; // Fluxo do Banco
-    let cashFlow = 0; // Fluxo do Caixa (Dinheiro em Mãos)
+    // --- 2. CÁLCULOS DOS TOTAIS ---
+    let faturamentoBruto = 0, despesasTotais = 0, contasAReceber = 0, valorRecebido = 0;
+    let bankFlow = 0;
+    let cashFlow = 0;
 
     filteredTransactions.forEach(t => {
         const amount = parseFloat(t.amount) || 0;
         if (t.type === 'income') {
             faturamentoBruto += amount;
             if (t.status === 'a_receber') {
-                contasARReceber += amount;
+                contasAReceber += amount;
             } else {
                 valorRecebido += amount;
             }
@@ -177,41 +166,66 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
             despesasTotais += amount;
         }
         
-        // Separa o fluxo de caixa (caixa) do fluxo de banco (banco ou indefinido)
         if (t.source === 'caixa') {
-            if (t.type === 'income' && t.status !== 'a_receber') {
-                cashFlow += amount;
-            } else if (t.type === 'expense') {
-                cashFlow -= amount;
-            }
-        } else { // 'banco' ou undefined (legado)
-            if (t.type === 'income' && t.status !== 'a_receber') {
-                bankFlow += amount;
-            } else if (t.type === 'expense') {
-                bankFlow -= amount;
-            }
+            if (t.type === 'income' && t.status !== 'a_receber') cashFlow += amount;
+            else if (t.type === 'expense') cashFlow -= amount;
+        } else { 
+            if (t.type === 'income' && t.status !== 'a_receber') bankFlow += amount;
+            else if (t.type === 'expense') bankFlow -= amount;
         }
     });
 
+    // --- 3. BLINDAGEM VISUAL (LÓGICA MEMORY-FIRST) ---
+    // Regra de Ouro: Ignoramos completamente o que está no DOM (textContent).
+    // Usamos apenas nossa memória interna (internalPendingRevenueCache).
+
+    let incomingValue = parseFloat(pendingOrdersValue) || 0;
+    let finalPendingToAdd = incomingValue;
+
+    // Se temos um valor positivo vindo do banco, atualizamos a memória.
+    if (incomingValue > 0) {
+        internalPendingRevenueCache = incomingValue;
+    }
+
+    // Se o valor vindo do banco é ZERO...
+    if (incomingValue === 0) {
+        // ...E nós TEMOS uma memória válida de um valor anterior neste mesmo filtro...
+        if (internalPendingRevenueCache !== null && internalPendingRevenueCache > 0) {
+            // ...Aí sim, ativamos o escudo e usamos a memória.
+            console.warn(`🛡️ [RENDERER] Escudo Ativado: Usando cache de memória (R$ ${internalPendingRevenueCache}) ao invés de 0.`);
+            finalPendingToAdd = internalPendingRevenueCache;
+        }
+        // SE a memória for null (primeira carga), finalPendingToAdd continua sendo 0.
+        // Isso vai sobrescrever os R$ 40.000 do HTML com R$ 0,00. SUCESSO.
+    }
+
+    contasAReceber += finalPendingToAdd;
+
     const lucroLiquido = valorRecebido - despesasTotais;
-    // Saldo em Conta (Banco) = Saldo Inicial + Fluxo do Banco
     const saldoEmConta = (userBankBalanceConfig.initialBalance || 0) + bankFlow;
-    // Saldo em Caixa (Mãos) = Apenas o Fluxo do Caixa (não usa saldo inicial)
     const saldoEmCaixa = cashFlow;
 
-    DOM.faturamentoBruto.textContent = `R$ ${faturamentoBruto.toFixed(2)}`;
-    DOM.despesasTotais.textContent = `R$ ${despesasTotais.toFixed(2)}`;
-    DOM.contasAReceber.textContent = `R$ ${contasARReceber.toFixed(2)}`;
-    DOM.lucroLiquido.textContent = `R$ ${lucroLiquido.toFixed(2)}`;
-    DOM.saldoEmConta.textContent = `R$ ${saldoEmConta.toFixed(2)}`;
-    DOM.saldoEmCaixa.textContent = `R$ ${saldoEmCaixa.toFixed(2)}`;
+    // --- 4. ATUALIZAÇÃO DO DOM ---
+    if (DOM.faturamentoBruto) DOM.faturamentoBruto.textContent = `R$ ${faturamentoBruto.toFixed(2)}`;
+    if (DOM.despesasTotais) DOM.despesasTotais.textContent = `R$ ${despesasTotais.toFixed(2)}`;
     
+    if (DOM.contasAReceber) {
+        DOM.contasAReceber.textContent = `R$ ${contasAReceber.toFixed(2)}`;
+        // Removemos datasets antigos para manter o código limpo
+        if (DOM.contasAReceber.hasAttribute('data-trusted')) {
+            DOM.contasAReceber.removeAttribute('data-trusted');
+        }
+    }
+    
+    if (DOM.lucroLiquido) DOM.lucroLiquido.textContent = `R$ ${lucroLiquido.toFixed(2)}`;
+    if (DOM.saldoEmConta) DOM.saldoEmConta.textContent = `R$ ${saldoEmConta.toFixed(2)}`;
+    if (DOM.saldoEmCaixa) DOM.saldoEmCaixa.textContent = `R$ ${saldoEmCaixa.toFixed(2)}`;
+    
+    // --- 5. CATEGORIAS ---
     const expenseCategories = {}, incomeCategories = {};
-
     filteredTransactions.forEach(t => {
         const amount = parseFloat(t.amount) || 0;
         const category = t.category || 'Sem Categoria';
-
         if (t.type === 'expense') {
             if (!expenseCategories[category]) expenseCategories[category] = 0;
             expenseCategories[category] += amount;
@@ -222,6 +236,8 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
     });
 
     const formatCategoryList = (categoryData, containerElement) => {
+        if (!containerElement) return;
+        
         const sortedCategories = Object.entries(categoryData)
             .sort(([, a], [, b]) => b - a)
             .slice(0, 5);
@@ -250,29 +266,22 @@ export const renderFinanceKPIs = (allTransactions, userBankBalanceConfig) => {
     return filteredTransactions;
 };
 
-/**
- * Função principal de renderização do dashboard financeiro (para carga inicial ou filtros)
- */
-export const renderFinanceDashboard = (allTransactions, userBankBalanceConfig) => {
+export const renderFinanceDashboard = (allTransactions, userBankBalanceConfig, pendingOrdersValue = 0) => {
     if (!DOM.periodFilter) return;
 
-    // 1. Renderiza os KPIs e obtém as transações filtradas
-    const filteredTransactions = renderFinanceKPIs(allTransactions, userBankBalanceConfig);
+    const filteredTransactions = renderFinanceKPIs(allTransactions, userBankBalanceConfig, pendingOrdersValue);
 
-    // 2. Filtra por busca
     const searchTerm = DOM.transactionSearchInput.value.toLowerCase();
     const displayTransactions = searchTerm ?
         filteredTransactions.filter(t => t.description.toLowerCase().includes(searchTerm)) :
         filteredTransactions;
         
-    // 3. Renderiza a lista de transações (apenas na carga inicial/filtro)
-    DOM.transactionsList.innerHTML = ''; // Limpa a lista
+    DOM.transactionsList.innerHTML = ''; 
     if (displayTransactions.length === 0) {
         showTransactionsPlaceholder(searchTerm.length > 0);
         return;
     }
     
-    // Ordena por data (mais novo primeiro)
     displayTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
     displayTransactions.forEach(addTransactionRow);
 };
