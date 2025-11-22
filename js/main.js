@@ -1,17 +1,10 @@
+// js/main.js
 // ========================================================
-// PARTE 1: INICIALIZAÇÃO DINÂMICA (v5.7.7 "Bomba Atômica")
+// PARTE 1: INICIALIZAÇÃO DINÂMICA (v5.14.0 - FINAL STABLE)
 // ========================================================
-
-// Esta função 'main' assíncrona agora envolve todo o aplicativo.
-// Isso nos permite usar 'await import()' para carregar dinamicamente
-// todos os módulos com um cache-buster de timestamp,
-// derrotando o cache agressivo do proxy/CDN.
 
 async function main() {
     
-    // 1. Gerar o cache-buster.
-    // Este é o 'v=timestamp' usado para forçar o recarregamento
-    // de todos os módulos dependentes.
     const cacheBuster = `?v=${new Date().getTime()}`;
 
     try {
@@ -19,18 +12,23 @@ async function main() {
         // PARTE 1.A: IMPORTAÇÕES DINÂMICAS DE MÓCULOS
         // ========================================================
 
-        // Firebase Core (externo, não precisa de cache-buster local)
         const { onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
         const { doc, getDoc, writeBatch, collection } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
         
-        // Configuração do Firebase (local, precisa de cache-buster)
         const { db, auth } = await import(`./firebaseConfig.js${cacheBuster}`);
-
-        // Módulo de Autenticação
         const { handleLogout } = await import(`./auth.js${cacheBuster}`);
 
-        // Módulos de Serviços de Negócio
-        const { initializeOrderService, saveOrder, deleteOrder, getOrderById, getAllOrders, cleanupOrderService } = await import(`./services/orderService.js${cacheBuster}`);
+        const { 
+            initializeOrderService, 
+            saveOrder, 
+            deleteOrder, 
+            getOrderById, 
+            getAllOrders, 
+            cleanupOrderService,
+            calculateTotalPendingRevenue,   
+            updateOrderDiscountFromFinance  
+        } = await import(`./services/orderService.js${cacheBuster}`);
+        
         const { 
             initializeFinanceService, 
             saveTransaction, 
@@ -40,21 +38,15 @@ async function main() {
             getAllTransactions, 
             cleanupFinanceService, 
             getTransactionByOrderId,
-            deleteAllTransactionsByOrderId 
+            deleteAllTransactionsByOrderId,
+            getTransactionById              
         } = await import(`./services/financeService.js${cacheBuster}`);
+        
         const { initializePricingService, savePriceTableChanges, deletePriceItem, getAllPricingItems, cleanupPricingService } = await import(`./services/pricingService.js${cacheBuster}`);
-
-        // Módulo de Utilitários
         const { initializeIdleTimer } = await import(`./utils.js${cacheBuster}`);
-
-        // Módulo de Interface do Usuário (UI)
-        // Carrega o "Arquivo-Barril" (ui.js). 
-        // O import() dinâmico de um barril retorna o namespace (como o 'UI' que usávamos).
+        
         const UI = await import(`./ui.js${cacheBuster}`);
 
-        // Módulos de Listeners
-        // v5.7.22: Todos os listeners agora são carregados dinamicamente
-        // e receberão a 'UI' por injeção.
         const { initializeAuthListeners } = await import(`./listeners/authListeners.js${cacheBuster}`);
         const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
@@ -65,7 +57,6 @@ async function main() {
         // ========================================================
         // PARTE 2: ESTADO GLOBAL E CONFIGURAÇÕES DA APLICAÇÃO
         // ========================================================
-        // (Sem alterações lógicas nesta seção)
 
         let userCompanyId = null;
         let userCompanyName = null;
@@ -74,7 +65,15 @@ async function main() {
         let currentDashboardView = 'orders';
         let currentOrdersView = 'pending';
         let partCounter = 0;
-        let currentOptionType = ''; // Para o modal de gerenciamento de opções
+        let currentOptionType = ''; 
+        
+        let orderUpdateDebounce = null;
+        let financeUpdateDebounce = null;
+
+        // --- CACHE DE ESTADO GLOBAL ---
+        // Armazena a última receita pendente válida (> 0) para evitar flashes de zero
+        let globalPendingRevenueCache = 0;
+        let lastFilterValue = 'thisMonth';
 
         const defaultOptions = {
             partTypes: ['Gola redonda manga curta', 'Gola redonda manga longa', 'Gola redonda manga longa com capuz', 'Gola redonda manga curta (sublimada na frente)', 'Gola polo manga curta', 'Gola polo manga longa', 'Gola V manga curta', 'Gola V manga longa', 'Short', 'Calça'],
@@ -83,10 +82,34 @@ async function main() {
 
 
         // ========================================================
+        // PARTE 2.B: FUNÇÃO DE RENDERIZAÇÃO SEGURA (CENTRALIZADA)
+        // ========================================================
+        // Todas as partes do sistema (Main, Listeners, Proxies) devem usar ESTA função.
+        
+        const safeRenderFinance = (source, transactions, config, pendingValue) => {
+            let finalValue = pendingValue;
+
+            // 1. Atualiza o cache se o valor novo for válido
+            if (pendingValue > 0) {
+                globalPendingRevenueCache = pendingValue;
+            }
+
+            // 2. Proteção contra "Zero Acidental" (Redundância ao Visual Shield do Renderer)
+            if (finalValue <= 0.01 && globalPendingRevenueCache > 0) {
+                // Silencioso na produção, mas ativo
+                finalValue = globalPendingRevenueCache;
+            }
+
+            UI.renderFinanceDashboard(transactions, config, finalValue);
+        };
+
+
+        // ========================================================
         // PARTE 3: LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO
         // ========================================================
         
         const initializeAppLogic = async (user) => {
+            console.log("🚀 [MAIN] Iniciando lógica da aplicação v5.14.0...");
             const userMappingRef = doc(db, "user_mappings", user.uid);
             const userMappingSnap = await getDoc(userMappingRef);
             
@@ -105,35 +128,51 @@ async function main() {
                 }
                 UI.DOM.userEmail.textContent = userCompanyName;
                 
-                // --- INICIALIZAÇÃO REATIVA (PÓS-REATORAÇÃO) ---
+                if (UI.DOM.periodFilter) {
+                    UI.DOM.periodFilter.value = 'thisMonth';
+                }
+
+                // --- INICIALIZAÇÃO REATIVA ---
+                console.log("🔌 [MAIN] Conectando serviços...");
                 initializeOrderService(userCompanyId, handleOrderChange, () => currentOrdersView);
                 initializeFinanceService(userCompanyId, handleFinanceChange, () => userBankBalanceConfig);
                 initializePricingService(userCompanyId, handlePricingChange); 
                 
-                // --- RENDERIZAÇÃO INICIAL (PESADA) ---
-                UI.renderOrders(getAllOrders(), currentOrdersView);
-                UI.renderFinanceDashboard(getAllTransactions(), userBankBalanceConfig);
+                // --- RENDERIZAÇÃO INICIAL ---
+                const now = new Date();
+                const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+                const pendingRevenue = calculateTotalPendingRevenue ? calculateTotalPendingRevenue(startOfThisMonth, endOfThisMonth) : 0;
                 
-                // --- INICIALIZAÇÃO DE LÓGICA E UI AUXILIAR ---
+                UI.renderOrders(getAllOrders(), currentOrdersView);
+                
+                // Renderização inicial Segura
+                safeRenderFinance('Init', getAllTransactions(), userBankBalanceConfig, pendingRevenue);
+                
                 initializeIdleTimer(UI.DOM, handleLogout);
                 initializeAndPopulateDatalists(); 
                 UI.updateNavButton(currentDashboardView);
                 
-                // --- TORNAR APP VISÍVEL (PIPELINE SINCRONIZADO v5.7.42) ---
-                // Usa setTimeout + Double rAF para garantir que o DOM esteja
-                // pintado e estável antes de disparar o checkBackupReminder.
-
                 setTimeout(() => {
-                    // 1. Oculta o Login e Remove o hidden do App, permitindo que o navegador comece a calcular o layout
-                    UI.DOM.authContainer.classList.add('hidden'); // <--- CORREÇÃO AQUI
+                    UI.DOM.authContainer.classList.add('hidden'); 
                     UI.DOM.app.classList.remove('hidden');
+                    
+                    // --- SAFETY REFRESH (2000ms) ---
+                    // Garante que, se o cálculo inicial falhou por race condition,
+                    // ele se corrige automaticamente após 2 segundos.
+                    setTimeout(async () => {
+                        if (UI.DOM.periodFilter && !UI.DOM.periodFilter.value) UI.DOM.periodFilter.value = 'thisMonth';
+                        
+                        if (calculateTotalPendingRevenue) {
+                            const dates = getCurrentDashboardDates(); 
+                            const freshPending = calculateTotalPendingRevenue(dates.startDate, dates.endDate);
+                            safeRenderFinance('SafetyRefresh', getAllTransactions(), userBankBalanceConfig, freshPending);
+                        }
+                    }, 2000); 
 
-                    // 2. Primeiro rAF: Espera o navegador agendar a próxima pintura
                     requestAnimationFrame(() => {
-                        // 3. Segundo rAF: Garante que a pintura anterior foi concluída
-                        // e o layout está 100% estável (Render Queue limpa).
                         requestAnimationFrame(() => {
-                            // 4. Agora é seguro manipular a animação do banner
                             checkBackupReminder();
                         });
                     });
@@ -158,8 +197,6 @@ async function main() {
             userBankBalanceConfig = { initialBalance: 0 };
         };
 
-        // PONTO DE ENTRADA PRINCIPAL (MOVIMENTADO)
-        // Agora é chamado *dentro* do 'main', após os imports.
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 initializeAppLogic(user);
@@ -172,7 +209,55 @@ async function main() {
         // ========================================================
         // PARTE 4: HANDLERS DE MUDANÇA (LÓGICA REATIVA)
         // ========================================================
-        // (Sem alterações lógicas nesta seção)
+
+        const getCurrentDashboardDates = () => {
+            const now = new Date();
+            const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+            if (!UI.DOM.periodFilter) return { startDate: defaultStart, endDate: defaultEnd };
+            
+            let filter = UI.DOM.periodFilter.value;
+            if (!filter) filter = 'thisMonth'; 
+
+            // Zera o cache se o filtro mudou de verdade
+            if (filter !== lastFilterValue) {
+                globalPendingRevenueCache = 0;
+                lastFilterValue = filter;
+            }
+
+            let startDate = null, endDate = null;
+
+            if (filter === 'custom') {
+                if (UI.DOM.startDateInput.value) startDate = new Date(UI.DOM.startDateInput.value + 'T00:00:00');
+                if (UI.DOM.endDateInput.value) endDate = new Date(UI.DOM.endDateInput.value + 'T23:59:59');
+                
+                if (!startDate || !endDate) {
+                    startDate = defaultStart;
+                    endDate = defaultEnd;
+                }
+            } else {
+                const startOfThisMonth = defaultStart;
+                const endOfThisMonth = defaultEnd;
+                const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+                const startOfThisYear = new Date(now.getFullYear(), 0, 1);
+                const endOfThisYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+
+                switch(filter) {
+                    case 'thisMonth': startDate = startOfThisMonth; endDate = endOfThisMonth; break;
+                    case 'lastMonth': startDate = startOfLastMonth; endDate = endOfLastMonth; break;
+                    case 'thisYear': startDate = startOfThisYear; endDate = endOfThisYear; break;
+                }
+            }
+            
+            if (!startDate || !endDate) {
+                startDate = defaultStart;
+                endDate = defaultEnd;
+            }
+
+            return { startDate, endDate };
+        };
 
         const handleOrderChange = (type, order, viewType) => {
             const isDelivered = order.orderStatus === 'Entregue';
@@ -180,7 +265,6 @@ async function main() {
             if (viewType === 'pending') {
                 if (isDelivered) {
                     UI.removeOrderCard(order.id);
-                    return; 
                 } else {
                     switch (type) {
                         case 'added': UI.addOrderCard(order, viewType); break;
@@ -192,7 +276,6 @@ async function main() {
             else if (viewType === 'delivered') {
                 if (!isDelivered) {
                     UI.removeOrderCard(order.id);
-                    return; 
                 } else {
                     switch (type) {
                         case 'added': UI.addOrderCard(order, viewType); break;
@@ -201,33 +284,23 @@ async function main() {
                     }
                 }
             }
+
+            if (calculateTotalPendingRevenue) {
+                if (orderUpdateDebounce) clearTimeout(orderUpdateDebounce);
+                // Debounce reduzido para 200ms
+                orderUpdateDebounce = setTimeout(() => {
+                    const { startDate, endDate } = getCurrentDashboardDates();
+                    const pendingRevenue = calculateTotalPendingRevenue(startDate, endDate);
+                    safeRenderFinance('OrderChange', getAllTransactions ? getAllTransactions() : [], userBankBalanceConfig, pendingRevenue);
+                }, 200);
+            }
         };
 
         const handleFinanceChange = (type, transaction, config) => {
-            UI.renderFinanceKPIs(getAllTransactions(), config);
-            
-            const filter = UI.DOM.periodFilter.value;
-            const now = new Date();
-            let startDate, endDate;
-
-            if (filter === 'custom') {
-                startDate = UI.DOM.startDateInput.value ? new Date(UI.DOM.startDateInput.value + 'T00:00:00') : null;
-                endDate = UI.DOM.endDateInput.value ? new Date(UI.DOM.endDateInput.value + 'T23:59:59') : null;
-            } else {
-                // Lógica de filtro de data padrão (thisMonth, lastMonth, thisYear)
-                const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-                const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-                const startOfThisYear = new Date(now.getFullYear(), 0, 1);
-                const endOfThisYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
-                if (filter === 'thisMonth') { startDate = startOfThisMonth; endDate = endOfThisMonth; }
-                if (filter === 'lastMonth') { startDate = startOfLastMonth; endDate = endOfLastMonth; }
-                if (filter === 'thisYear') { startDate = startOfThisYear; endDate = endOfThisYear; }
-            }
-            
+            const { startDate, endDate } = getCurrentDashboardDates();
             const transactionDate = new Date(transaction.date + 'T00:00:00');
             let passesDateFilter = true;
+            
             if (startDate && endDate) passesDateFilter = transactionDate >= startDate && transactionDate <= endDate;
             else if(startDate && !endDate) passesDateFilter = transactionDate >= startDate;
             else if(!startDate && endDate) passesDateFilter = transactionDate <= endDate;
@@ -235,36 +308,41 @@ async function main() {
             const searchTerm = UI.DOM.transactionSearchInput.value.toLowerCase();
             const passesSearchFilter = transaction.description.toLowerCase().includes(searchTerm);
 
+            // Atualização Granular (Visual Apenas)
             if (!passesDateFilter || !passesSearchFilter) {
                 if (type === 'modified' || type === 'removed') {
                     UI.removeTransactionRow(transaction.id);
                 }
-                return; 
+            } else {
+                switch (type) {
+                    case 'added': UI.addTransactionRow(transaction); break;
+                    case 'modified': UI.updateTransactionRow(transaction); break;
+                    case 'removed': UI.removeTransactionRow(transaction.id); break;
+                }
             }
 
-            switch (type) {
-                case 'added': UI.addTransactionRow(transaction); break;
-                case 'modified': UI.updateTransactionRow(transaction); break;
-                case 'removed': UI.removeTransactionRow(transaction.id); break;
+            // Atualização do Dashboard Completo (Com Debounce Otimizado)
+            if (calculateTotalPendingRevenue) {
+                if (financeUpdateDebounce) clearTimeout(financeUpdateDebounce);
+                // Debounce ajustado para 250ms para acomodar o Batching do Service
+                financeUpdateDebounce = setTimeout(() => {
+                    const currentDates = getCurrentDashboardDates();
+                    const pendingRevenue = calculateTotalPendingRevenue(currentDates.startDate, currentDates.endDate);
+                    
+                    safeRenderFinance('FinanceChange', getAllTransactions(), config, pendingRevenue);
+                }, 250);
             }
         };
 
         const handlePricingChange = (type, item) => {
             const isEditMode = !UI.DOM.editPriceTableBtn.classList.contains('hidden');
             const mode = isEditMode ? 'view' : 'edit';
-            
             switch (type) {
                 case 'added': UI.addPriceTableRow(item, mode); break;
                 case 'modified': UI.updatePriceTableRow(item, mode); break;
                 case 'removed': UI.removePriceTableRow(item.id); break;
             }
         };
-
-
-        // ========================================================
-        // PARTE 5: FUNÇÕES DE LÓGICA TRANSVERSAL (Cross-Cutting)
-        // ========================================================
-        // (Sem alterações lógicas nesta seção)
 
         const getOptionsFromStorage = (type) => {
             const stored = localStorage.getItem(`${userCompanyId}_${type}`);
@@ -354,7 +432,6 @@ async function main() {
         };
 
         const triggerAutoBackupIfNeeded = () => {
-            // (Função preservada para referência futura, mas não chamada diretamente nesta versão)
             const key = `lastAutoBackupTimestamp_${userCompanyId}`;
             const lastBackup = localStorage.getItem(key);
             if (!lastBackup) return;
@@ -365,17 +442,10 @@ async function main() {
             }
         };
 
-        // ========================================================
-        // CORREÇÃO v5.7.50: LÓGICA DEFINITIVA DO BANNER
-        // ========================================================
-        // Substitui completamente as tentativas anteriores (v5.7.38/41).
-        // Funciona em harmonia com o Pipeline Sincronizado (rAF) da initializeAppLogic.
-        
         const checkBackupReminder = () => {
             const key = `lastAutoBackupTimestamp_${userCompanyId}`;
             const lastBackup = localStorage.getItem(key);
             const sevenDaysInMillis = 7 * 24 * 60 * 60 * 1000;
-
             let needsReminder = false;
             
             if (!lastBackup) {
@@ -388,33 +458,13 @@ async function main() {
 
             if (needsReminder) {
                 const banner = UI.DOM.backupReminderBanner;
-
-                // Passo 1: Estado Inicial
-                // Removemos .hidden para que o elemento exista no layout.
-                // Removemos .toast-enter para garantir que ele comece "sem animação".
                 banner.classList.remove('hidden');
                 banner.classList.remove('toast-enter');
-
-                // Passo 2: Forçar Reflow (Cálculo de Layout)
-                // Ao ler o offsetWidth, obrigamos o navegador a processar o estado atual
-                // (visível, mas sem a classe de animação) ANTES de prosseguir.
                 void banner.offsetWidth;
-
-                // Passo 3: Disparar Animação
-                // Agora que o layout base está calculado, adicionamos a classe.
-                // A transição CSS vai ocorrer suavemente.
                 banner.classList.add('toast-enter');
             }
         };
 
-        // ========================================================
-        // PARTE 6: INICIALIZAÇÃO DOS EVENT LISTENERS
-        // ========================================================
-        // (v5.7.22: Correção do Conflito de Módulo "Unificação")
-
-        // Delega a anexação de todos os event listeners para módulos especialistas,
-        // injetando as dependências necessárias (handlers, serviços e estado).
-        
         initializeAuthListeners(UI);
 
         initializeNavigationListeners(UI, {
@@ -454,13 +504,27 @@ async function main() {
             userCompanyName: () => userCompanyName 
         });
 
-        initializeFinanceListeners(UI, {
+        // ==================================================================
+        // PROXY DE UI (Mantido para Compatibilidade)
+        // ==================================================================
+        const FinanceUIProxy = Object.create(UI);
+        FinanceUIProxy.renderFinanceDashboard = (transactions, config, pendingReceived) => {
+            const { startDate, endDate } = getCurrentDashboardDates();
+            const authoritativePending = calculateTotalPendingRevenue(startDate, endDate);
+            let finalPending = authoritativePending > 0 ? authoritativePending : pendingReceived;
+            safeRenderFinance('ListenerProxy', transactions, config, finalPending);
+        };
+
+        initializeFinanceListeners(FinanceUIProxy, { 
             services: {
                 saveTransaction,
                 deleteTransaction,
                 markTransactionAsPaid,
                 getAllTransactions,
-                saveInitialBalance
+                saveInitialBalance,
+                getTransactionById,              
+                calculateTotalPendingRevenue,    
+                updateOrderDiscountFromFinance   
             },
             getConfig: () => userBankBalanceConfig,
             setConfig: (newState) => {
@@ -485,7 +549,6 @@ async function main() {
 
     } catch (error) {
         console.error("Falha crítica ao inicializar o PagLucro Gestor:", error);
-        // v5.7.7: Exibe um erro amigável se os módulos falharem ao carregar.
         document.body.innerHTML = `
             <div style="padding: 20px; text-align: center; font-family: sans-serif;">
                 <h1 style="color: #D90000;">Erro Crítico de Inicialização</h1>
@@ -497,10 +560,4 @@ async function main() {
         `;
     }
 }
-
-// ========================================================
-// PARTE 7: PONTO DE ENTRADA DA APLICAÇÃO (v5.7.7)
-// ========================================================
-// Inicia a função 'main' para carregar dinamicamente 
-// todos os módulos e iniciar a aplicação.
 main();
