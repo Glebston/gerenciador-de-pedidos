@@ -1,6 +1,6 @@
 // js/services/orderService.js
 // ==========================================================
-// MÓDULO ORDER SERVICE (v5.13.0 - BATCHED STABILITY)
+// MÓDULO ORDER SERVICE (v5.18.0 - NOTIFICATION FIX)
 // ==========================================================
 
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -10,7 +10,6 @@ import { db } from '../firebaseConfig.js';
 let dbCollection = null;      
 let allOrders = [];           
 let unsubscribeListener = null; 
-const DEBUG_MODE = true; 
 
 // --- Funções Auxiliares de Cálculo ---
 
@@ -51,17 +50,17 @@ const setupFirestoreListener = (granularUpdateCallback, getViewCallback) => {
 
     const q = query(dbCollection);
     unsubscribeListener = onSnapshot(q, (snapshot) => {
-        let hasChanges = false;
-        let lastChangeType = 'modified';
-        let lastChangedData = null;
-
-        // 1. Processamento em Lote (Batch)
-        // Evita expor o array allOrders em estado parcial
+        
+        // CORREÇÃO CRÍTICA v5.18.0:
+        // O Batching de dados (atualizar array) é mantido para consistência.
+        // MAS a notificação (callback) volta a ser feita dentro do loop.
+        // O Main.js precisa receber o evento 'added' para CADA pedido para criar os cards.
+        
         snapshot.docChanges().forEach((change) => {
-            hasChanges = true;
             const data = { id: change.doc.id, ...change.doc.data() };
             const index = allOrders.findIndex(o => o.id === data.id);
 
+            // 1. Atualiza a Memória (Batching Lógico)
             if (change.type === 'added') {
                 if (index === -1) allOrders.push(data);
             } else if (change.type === 'modified') {
@@ -71,17 +70,11 @@ const setupFirestoreListener = (granularUpdateCallback, getViewCallback) => {
                 if (index > -1) allOrders.splice(index, 1);
             }
             
-            lastChangeType = change.type;
-            lastChangedData = data;
-        });
-
-        // 2. Notificação Consolidada
-        if (hasChanges) {
-            // Ordenação opcional se necessário, mas mantemos o foco na integridade
+            // 2. Notifica a UI imediatamente (Para desenhar o card)
             if (granularUpdateCallback) {
-                granularUpdateCallback(lastChangeType, lastChangedData, getViewCallback());
+                granularUpdateCallback(change.type, data, getViewCallback());
             }
-        }
+        });
 
     }, (error) => {
         console.error("Erro ao buscar pedidos em tempo real:", error);
@@ -119,7 +112,6 @@ export const getAllOrders = () => {
 };
 
 export const calculateTotalPendingRevenue = (startDate = null, endDate = null) => {
-    // Cálculo Blindado: Se não houver pedidos carregados, retorna 0 (mas o Proxy vai tratar isso)
     if (allOrders.length === 0) return 0;
 
     const total = allOrders.reduce((acc, order) => {
