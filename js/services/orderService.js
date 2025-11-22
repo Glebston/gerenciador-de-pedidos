@@ -1,6 +1,6 @@
 // js/services/orderService.js
 // ==========================================================
-// MÓDULO ORDER SERVICE (v5.18.0 - NOTIFICATION FIX)
+// MÓDULO ORDER SERVICE (v5.19.0 - SMART ELASTIC DISCOUNT)
 // ==========================================================
 
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -51,16 +51,14 @@ const setupFirestoreListener = (granularUpdateCallback, getViewCallback) => {
     const q = query(dbCollection);
     unsubscribeListener = onSnapshot(q, (snapshot) => {
         
-        // CORREÇÃO CRÍTICA v5.18.0:
-        // O Batching de dados (atualizar array) é mantido para consistência.
-        // MAS a notificação (callback) volta a ser feita dentro do loop.
-        // O Main.js precisa receber o evento 'added' para CADA pedido para criar os cards.
+        // Mantendo a correção da v5.18.0:
+        // Notificação individual para garantir que a UI desenhe cada card.
         
         snapshot.docChanges().forEach((change) => {
             const data = { id: change.doc.id, ...change.doc.data() };
             const index = allOrders.findIndex(o => o.id === data.id);
 
-            // 1. Atualiza a Memória (Batching Lógico)
+            // 1. Atualiza a Memória
             if (change.type === 'added') {
                 if (index === -1) allOrders.push(data);
             } else if (change.type === 'modified') {
@@ -70,7 +68,7 @@ const setupFirestoreListener = (granularUpdateCallback, getViewCallback) => {
                 if (index > -1) allOrders.splice(index, 1);
             }
             
-            // 2. Notifica a UI imediatamente (Para desenhar o card)
+            // 2. Notifica a UI
             if (granularUpdateCallback) {
                 granularUpdateCallback(change.type, data, getViewCallback());
             }
@@ -142,6 +140,7 @@ export const calculateTotalPendingRevenue = (startDate = null, endDate = null) =
     return total;
 };
 
+// --- CORREÇÃO DE SINCRONIA FINANCEIRA (v5.19.0) ---
 export const updateOrderDiscountFromFinance = async (orderId, diffValue) => {
     if (!orderId || !dbCollection) return;
     const orderRef = doc(dbCollection, orderId);
@@ -156,9 +155,21 @@ export const updateOrderDiscountFromFinance = async (orderId, diffValue) => {
         downPayment: currentPaid + diffValue
     };
 
+    // Lógica Elástica de Desconto
     if (diffValue < 0) {
-        const adjustment = diffValue * -1; 
+        // Se o pagamento DIMINUIU (diff negativo), o dinheiro sumiu.
+        // Aumentamos o desconto para cobrir a diferença.
+        const adjustment = Math.abs(diffValue);
         updates.discount = currentDiscount + adjustment;
+    } else if (diffValue > 0) {
+        // Se o pagamento AUMENTOU (diff positivo), o dinheiro apareceu/voltou.
+        // Devemos REDUZIR o desconto proporcionalmente, pois não precisamos mais dele.
+        let newDiscount = currentDiscount - diffValue;
+        
+        // Trava de segurança: Desconto nunca pode ser negativo
+        if (newDiscount < 0) newDiscount = 0;
+        
+        updates.discount = newDiscount;
     }
 
     await updateDoc(orderRef, updates);
