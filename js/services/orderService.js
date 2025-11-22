@@ -1,125 +1,177 @@
-// Importa as funções necessárias do Firestore
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// js/services/orderService.js
+// ==========================================================
+// MÓDULO ORDER SERVICE (v5.13.0 - BATCHED STABILITY)
+// ==========================================================
 
-// Importa a instância 'db' do nosso arquivo de configuração
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db } from '../firebaseConfig.js';
 
 // --- Estado do Módulo ---
-let dbCollection = null;      // Referência à coleção de pedidos no Firestore
-let allOrders = [];           // Cache local de todos os pedidos para acesso rápido
-let unsubscribeListener = null; // Função para desligar o listener do Firestore no logout
+let dbCollection = null;      
+let allOrders = [];           
+let unsubscribeListener = null; 
+const DEBUG_MODE = true; 
 
-// --- Funções Privadas ---
+// --- Funções Auxiliares de Cálculo ---
 
-/**
- * Configura o listener em tempo real para a coleção de pedidos.
- * @param {function} granularUpdateCallback - A função (do main.js) que será chamada para cada mudança granular.
- * @param {function} getViewCallback - Função que retorna a visualização atual ('pending' ou 'delivered').
- */
+const countPartItems = (part) => {
+    let totalQty = 0;
+    if (part.sizes && typeof part.sizes === 'object') {
+        Object.values(part.sizes).forEach(sizesObj => {
+            if (sizesObj && typeof sizesObj === 'object') {
+                Object.values(sizesObj).forEach(qty => {
+                    totalQty += (parseInt(qty) || 0);
+                });
+            }
+        });
+    }
+    if (part.details && Array.isArray(part.details)) {
+        totalQty += part.details.length;
+    }
+    return totalQty;
+};
+
+const calculateOrderTotalValue = (order) => {
+    let grossTotal = 0;
+    if (order.parts && Array.isArray(order.parts)) {
+        order.parts.forEach(part => {
+            const price = parseFloat(part.unitPriceSpecific) || parseFloat(part.unitPriceStandard) || parseFloat(part.unitPrice) || 0;
+            const qty = countPartItems(part);
+            grossTotal += (price * qty);
+        });
+    }
+    const discount = parseFloat(order.discount) || 0;
+    return grossTotal - discount;
+};
+
+// --- Funções Privadas do Firestore ---
+
 const setupFirestoreListener = (granularUpdateCallback, getViewCallback) => {
-    if (unsubscribeListener) unsubscribeListener(); // Garante que não haja listeners duplicados
+    if (unsubscribeListener) unsubscribeListener(); 
 
     const q = query(dbCollection);
     unsubscribeListener = onSnapshot(q, (snapshot) => {
-        
-        snapshot.docChanges().forEach((change) => {
-            // --- CORREÇÃO v4.2: A verificação 'hasPendingWrites' foi REMOVIDA daqui ---
-            // Isso garante que o listener processe *todas* as mudanças,
-            // incluindo as iniciadas pelo próprio cliente (como "Quitar e Entregar").
+        let hasChanges = false;
+        let lastChangeType = 'modified';
+        let lastChangedData = null;
 
+        // 1. Processamento em Lote (Batch)
+        // Evita expor o array allOrders em estado parcial
+        snapshot.docChanges().forEach((change) => {
+            hasChanges = true;
             const data = { id: change.doc.id, ...change.doc.data() };
             const index = allOrders.findIndex(o => o.id === data.id);
 
-            // Gerencia o cache local
             if (change.type === 'added') {
-                if (index === -1) { // Garante que não exista
-                    allOrders.push(data);
-                }
+                if (index === -1) allOrders.push(data);
             } else if (change.type === 'modified') {
-                if (index > -1) {
-                    allOrders[index] = data; // Atualiza o item no cache
-                } else {
-                    // Se não existia (raro, mas pode acontecer em 'modified'), adiciona
-                    allOrders.push(data);
-                }
+                if (index > -1) allOrders[index] = data;
+                else allOrders.push(data);
             } else if (change.type === 'removed') {
-                if (index > -1) {
-                    allOrders.splice(index, 1); // Remove do cache
-                }
+                if (index > -1) allOrders.splice(index, 1);
             }
             
-            // Invoca o callback granular para que a UI seja atualizada
-            if (granularUpdateCallback) {
-                granularUpdateCallback(change.type, data, getViewCallback());
-            }
+            lastChangeType = change.type;
+            lastChangedData = data;
         });
+
+        // 2. Notificação Consolidada
+        if (hasChanges) {
+            // Ordenação opcional se necessário, mas mantemos o foco na integridade
+            if (granularUpdateCallback) {
+                granularUpdateCallback(lastChangeType, lastChangedData, getViewCallback());
+            }
+        }
 
     }, (error) => {
         console.error("Erro ao buscar pedidos em tempo real:", error);
     });
 };
 
-
 // --- API Pública do Módulo ---
 
-/**
- * Inicializa o serviço de pedidos para uma empresa específica.
- * @param {string} companyId - O ID da empresa do usuário logado.
- * @param {function} granularUpdateCallback - A função de callback granular (em main.js).
- * @param {function} getViewCallback - Função que retorna a visualização atual.
- */
 export const initializeOrderService = (companyId, granularUpdateCallback, getViewCallback) => {
     dbCollection = collection(db, `companies/${companyId}/orders`);
     setupFirestoreListener(granularUpdateCallback, getViewCallback);
 };
 
-/**
- * Salva um pedido (cria um novo ou atualiza um existente).
- * @param {object} orderData - O objeto com todos os dados do pedido.
- * @param {string|null} orderId - O ID do pedido a ser atualizado, ou null para criar um novo.
- * @returns {Promise<string>} O ID do documento salvo.
- */
 export const saveOrder = async (orderData, orderId) => {
     if (orderId) {
-        // Atualiza um pedido existente
         await updateDoc(doc(dbCollection, orderId), orderData);
         return orderId;
     } else {
-        // Adiciona um novo pedido
         const docRef = await addDoc(dbCollection, orderData);
         return docRef.id;
     }
 };
 
-/**
- * Exclui um pedido do Firestore.
- * @param {string} id - O ID do pedido a ser excluído.
- */
 export const deleteOrder = async (id) => {
     if (!id) return;
     await deleteDoc(doc(dbCollection, id));
 };
 
-/**
- * Busca um único pedido no cache local pelo seu ID.
- * @param {string} id - O ID do pedido.
- * @returns {object|undefined} O objeto do pedido ou undefined se não for encontrado.
- */
 export const getOrderById = (id) => {
     return allOrders.find(o => o.id === id);
 };
 
-/**
- * Retorna a lista completa de todos os pedidos do cache local.
- * @returns {Array}
- */
 export const getAllOrders = () => {
-    return [...allOrders]; // Retorna cópia
+    return [...allOrders]; 
 };
 
-/**
- * Limpa o estado do serviço e desliga o listener. Essencial para o logout.
- */
+export const calculateTotalPendingRevenue = (startDate = null, endDate = null) => {
+    // Cálculo Blindado: Se não houver pedidos carregados, retorna 0 (mas o Proxy vai tratar isso)
+    if (allOrders.length === 0) return 0;
+
+    const total = allOrders.reduce((acc, order) => {
+        const rawStatus = order.orderStatus ? order.orderStatus.trim() : '';
+        const status = rawStatus.toLowerCase();
+        
+        if (status === 'cancelado' || status === 'entregue') return acc;
+
+        if (startDate || endDate) {
+            const orderDateStr = order.orderDate || order.date || (order.createdAt ? order.createdAt.split('T')[0] : null);
+            if (!orderDateStr) return acc; 
+            const orderDate = new Date(orderDateStr + 'T00:00:00');
+            if (isNaN(orderDate.getTime())) return acc; 
+            if (startDate && orderDate < startDate) return acc;
+            if (endDate && orderDate > endDate) return acc;
+        }
+
+        const totalOrder = calculateOrderTotalValue(order);
+        const paid = parseFloat(order.downPayment) || 0;
+        const remaining = totalOrder - paid;
+
+        if (remaining > 0.01) {
+            return acc + remaining;
+        }
+        return acc;
+    }, 0);
+
+    return total;
+};
+
+export const updateOrderDiscountFromFinance = async (orderId, diffValue) => {
+    if (!orderId || !dbCollection) return;
+    const orderRef = doc(dbCollection, orderId);
+    const orderSnap = await getDoc(orderRef);
+    if (!orderSnap.exists()) return;
+
+    const orderData = orderSnap.data();
+    const currentDiscount = parseFloat(orderData.discount) || 0;
+    const currentPaid = parseFloat(orderData.downPayment) || 0;
+
+    let updates = {
+        downPayment: currentPaid + diffValue
+    };
+
+    if (diffValue < 0) {
+        const adjustment = diffValue * -1; 
+        updates.discount = currentDiscount + adjustment;
+    }
+
+    await updateDoc(orderRef, updates);
+};
+
 export const cleanupOrderService = () => {
     if (unsubscribeListener) {
         unsubscribeListener();
