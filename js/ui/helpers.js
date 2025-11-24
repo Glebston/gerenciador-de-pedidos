@@ -1,8 +1,8 @@
+// js/ui/helpers.js
 // ==========================================================
-// MÓDULO UI HELPERS (v4.3.0 - Patch v5.8.1)
-// Responsabilidade: Fornecer funções "ajudantes"
-// genéricas usadas por outros módulos da UI.
-// (Ex: formatar telefone, atualizar botões, etc.)
+// MÓDULO UI HELPERS (v5.19.1 - IMPROVED UX BUTTONS)
+// Responsabilidade: Fornecer funções "ajudantes" visuais.
+// Atualizado: Melhoria na affordance dos botões Banco/Caixa.
 // ==========================================================
 
 import { DOM, CHECK_ICON_SVG } from './dom.js';
@@ -27,19 +27,50 @@ export const handleCookieConsent = () => {
 
 /**
  * Atualiza a UI dos seletores de origem (Banco/Caixa)
- * @param {HTMLElement} container - O elemento container (ex: DOM.transactionSourceContainer)
+ * Transformando-os visualmente em botões clicáveis com feedback claro.
+ * @param {HTMLElement} container - O elemento container
  * @param {string} selectedSource - 'banco' ou 'caixa'
  */
 export const updateSourceSelectionUI = (container, selectedSource) => {
     if (!container) return;
+    
     container.querySelectorAll('.source-selector').forEach(btn => {
-        const isSelected = btn.dataset.source === selectedSource;
-        btn.classList.toggle('active', isSelected);
+        const source = btn.dataset.source;
+        const isSelected = source === selectedSource;
         
-        // === CORREÇÃO v5.8.1 (Blindagem) ===
-        // Verifica se o elemento de ícone existe antes de tentar manipulá-lo.
-        // Isso permite usar essa função tanto no Modal de Pedidos (com ícone)
-        // quanto no Modal de Transações (sem ícone).
+        // Limpa classes de estado anteriores para garantir consistência
+        btn.classList.remove(
+            'active', 'bg-white', 'bg-indigo-50', 'bg-gray-100', 
+            'border-gray-300', 'border-indigo-500', 'border-gray-500', 
+            'text-gray-700', 'text-indigo-700', 'text-gray-900',
+            'ring-1', 'ring-indigo-500', 'ring-gray-500', 'shadow-sm'
+        );
+
+        // Adiciona classes base para "Aparência de Botão Clicável"
+        btn.classList.add(
+            'cursor-pointer', 
+            'transition-all', 
+            'duration-200', 
+            'border', 
+            'rounded-md', 
+            'shadow-sm', // Sombra suave para profundidade
+            'hover:shadow-md' // Feedback no hover
+        );
+
+        if (isSelected) {
+            // Estilo ATIVO (Selecionado)
+            if (source === 'banco') {
+                btn.classList.add('bg-indigo-50', 'border-indigo-500', 'text-indigo-700', 'ring-1', 'ring-indigo-500');
+            } else {
+                btn.classList.add('bg-gray-100', 'border-gray-500', 'text-gray-900', 'ring-1', 'ring-gray-500');
+            }
+            btn.classList.add('active'); // Mantém classe lógica
+        } else {
+            // Estilo INATIVO (Mas clicável)
+            btn.classList.add('bg-white', 'border-gray-300', 'text-gray-700', 'hover:bg-gray-50', 'hover:border-gray-400');
+        }
+        
+        // Gerencia o ícone de check
         const iconPlaceholder = btn.querySelector('.icon-placeholder');
         if (iconPlaceholder) {
             iconPlaceholder.innerHTML = isSelected ? CHECK_ICON_SVG : '';
@@ -66,8 +97,8 @@ export const openOptionsModal = (type, options) => {
 
 export const formatPhoneNumber = (value) => {
     if (!value) return "";
-    value = value.replace(/\D/g,'');             // Remove tudo o que não é dígito
-    value = value.replace(/^(\d{2})(\d)/g,'($1) $2'); // Coloca parênteses em volta dos dois primeiros dígitos
-    value = value.replace(/(\d)(\d{4})$/,'$1-$2');    // Coloca hífen entre o quarto e o quinto dígitos
+    value = value.replace(/\D/g,'');
+    value = value.replace(/^(\d{2})(\d)/g,'($1) $2');
+    value = value.replace(/(\d)(\d{4})$/,'$1-$2');
     return value;
 }
