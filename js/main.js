@@ -1,6 +1,6 @@
 // js/main.js
 // ========================================================
-// PARTE 1: INICIALIZAÇÃO DINÂMICA (v5.14.0 - FINAL STABLE)
+// PARTE 1: INICIALIZAÇÃO DINÂMICA (v5.20.1 - HOTFIX BINDING)
 // ========================================================
 
 async function main() {
@@ -37,7 +37,8 @@ async function main() {
             saveInitialBalance, 
             getAllTransactions, 
             cleanupFinanceService, 
-            getTransactionByOrderId,
+            getTransactionByOrderId,        // Mantido para compatibilidade
+            getTransactionsByOrderId,       // NOVO: Importado para suportar lista de pagamentos
             deleteAllTransactionsByOrderId,
             getTransactionById              
         } = await import(`./services/financeService.js${cacheBuster}`);
@@ -71,7 +72,6 @@ async function main() {
         let financeUpdateDebounce = null;
 
         // --- CACHE DE ESTADO GLOBAL ---
-        // Armazena a última receita pendente válida (> 0) para evitar flashes de zero
         let globalPendingRevenueCache = 0;
         let lastFilterValue = 'thisMonth';
 
@@ -84,19 +84,15 @@ async function main() {
         // ========================================================
         // PARTE 2.B: FUNÇÃO DE RENDERIZAÇÃO SEGURA (CENTRALIZADA)
         // ========================================================
-        // Todas as partes do sistema (Main, Listeners, Proxies) devem usar ESTA função.
         
         const safeRenderFinance = (source, transactions, config, pendingValue) => {
             let finalValue = pendingValue;
 
-            // 1. Atualiza o cache se o valor novo for válido
             if (pendingValue > 0) {
                 globalPendingRevenueCache = pendingValue;
             }
 
-            // 2. Proteção contra "Zero Acidental" (Redundância ao Visual Shield do Renderer)
             if (finalValue <= 0.01 && globalPendingRevenueCache > 0) {
-                // Silencioso na produção, mas ativo
                 finalValue = globalPendingRevenueCache;
             }
 
@@ -109,7 +105,7 @@ async function main() {
         // ========================================================
         
         const initializeAppLogic = async (user) => {
-            console.log("🚀 [MAIN] Iniciando lógica da aplicação v5.14.0...");
+            console.log("🚀 [MAIN] Iniciando lógica da aplicação v5.20.1...");
             const userMappingRef = doc(db, "user_mappings", user.uid);
             const userMappingSnap = await getDoc(userMappingRef);
             
@@ -147,7 +143,6 @@ async function main() {
                 
                 UI.renderOrders(getAllOrders(), currentOrdersView);
                 
-                // Renderização inicial Segura
                 safeRenderFinance('Init', getAllTransactions(), userBankBalanceConfig, pendingRevenue);
                 
                 initializeIdleTimer(UI.DOM, handleLogout);
@@ -158,9 +153,6 @@ async function main() {
                     UI.DOM.authContainer.classList.add('hidden'); 
                     UI.DOM.app.classList.remove('hidden');
                     
-                    // --- SAFETY REFRESH (2000ms) ---
-                    // Garante que, se o cálculo inicial falhou por race condition,
-                    // ele se corrige automaticamente após 2 segundos.
                     setTimeout(async () => {
                         if (UI.DOM.periodFilter && !UI.DOM.periodFilter.value) UI.DOM.periodFilter.value = 'thisMonth';
                         
@@ -220,7 +212,6 @@ async function main() {
             let filter = UI.DOM.periodFilter.value;
             if (!filter) filter = 'thisMonth'; 
 
-            // Zera o cache se o filtro mudou de verdade
             if (filter !== lastFilterValue) {
                 globalPendingRevenueCache = 0;
                 lastFilterValue = filter;
@@ -287,7 +278,6 @@ async function main() {
 
             if (calculateTotalPendingRevenue) {
                 if (orderUpdateDebounce) clearTimeout(orderUpdateDebounce);
-                // Debounce reduzido para 200ms
                 orderUpdateDebounce = setTimeout(() => {
                     const { startDate, endDate } = getCurrentDashboardDates();
                     const pendingRevenue = calculateTotalPendingRevenue(startDate, endDate);
@@ -308,7 +298,6 @@ async function main() {
             const searchTerm = UI.DOM.transactionSearchInput.value.toLowerCase();
             const passesSearchFilter = transaction.description.toLowerCase().includes(searchTerm);
 
-            // Atualização Granular (Visual Apenas)
             if (!passesDateFilter || !passesSearchFilter) {
                 if (type === 'modified' || type === 'removed') {
                     UI.removeTransactionRow(transaction.id);
@@ -321,10 +310,8 @@ async function main() {
                 }
             }
 
-            // Atualização do Dashboard Completo (Com Debounce Otimizado)
             if (calculateTotalPendingRevenue) {
                 if (financeUpdateDebounce) clearTimeout(financeUpdateDebounce);
-                // Debounce ajustado para 250ms para acomodar o Batching do Service
                 financeUpdateDebounce = setTimeout(() => {
                     const currentDates = getCurrentDashboardDates();
                     const pendingRevenue = calculateTotalPendingRevenue(currentDates.startDate, currentDates.endDate);
@@ -498,7 +485,8 @@ async function main() {
                 deleteOrder,
                 saveTransaction,
                 deleteTransaction,
-                getTransactionByOrderId,
+                getTransactionByOrderId,        // Legacy (Singular)
+                getTransactionsByOrderId,       // NOVO: Passado para o listener usar a lista
                 deleteAllTransactionsByOrderId
             },
             userCompanyName: () => userCompanyName 
