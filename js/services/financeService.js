@@ -1,6 +1,6 @@
 // js/services/financeService.js
 // ==========================================================
-// MÓDULO FINANCE SERVICE (v5.13.0 - BATCHED & SANITIZED)
+// MÓDULO FINANCE SERVICE (v5.20.0 - MULTI-TRANSACTION SUPPORT)
 // ==========================================================
 
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -24,7 +24,6 @@ const setupFirestoreListener = (granularUpdateCallback, getConfigCallback) => {
         let lastChangedData = null;
 
         // 1. Processamento em Lote (Batching)
-        // Evita disparar eventos para cada transação durante o carregamento inicial
         snapshot.docChanges().forEach((change) => {
             hasChanges = true;
             const data = { id: change.doc.id, ...change.doc.data() };
@@ -44,11 +43,8 @@ const setupFirestoreListener = (granularUpdateCallback, getConfigCallback) => {
         });
 
         // 2. Notificação Consolidada
-        // Só avisa o main.js depois de processar todas as mudanças do snapshot atual
         if (hasChanges) {
             if (granularUpdateCallback) {
-                // Passamos null no segundo argumento se for um batch grande, 
-                // ou o lastChangedData se for uma edição pontual (o main.js lida com isso)
                 granularUpdateCallback(lastChangeType, lastChangedData, getConfigCallback());
             }
         }
@@ -104,6 +100,12 @@ export const getTransactionById = (id) => {
     return allTransactions.find(t => t.id === id);
 };
 
+// ALTERAÇÃO v5.20: Agora retorna ARRAY (filter) em vez de um item único (find)
+export const getTransactionsByOrderId = (orderId) => {
+    return allTransactions.filter(t => t.orderId === orderId);
+};
+
+// Mantido para retrocompatibilidade (retorna o primeiro encontrado)
 export const getTransactionByOrderId = (orderId) => {
     return allTransactions.find(t => t.orderId === orderId);
 };
@@ -111,7 +113,6 @@ export const getTransactionByOrderId = (orderId) => {
 export const deleteAllTransactionsByOrderId = async (orderId) => {
     if (!orderId || !dbCollection) return;
     
-    // Busca localmente primeiro para evitar leituras desnecessárias se vazio
     const hasLinked = allTransactions.some(t => t.orderId === orderId);
     if (!hasLinked) return;
 
