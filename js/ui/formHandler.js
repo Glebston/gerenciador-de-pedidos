@@ -1,13 +1,128 @@
 // ==========================================================
-// MÓDULO FORM HANDLER (v4.5.2 - Patch Final Blindagem)
+// MÓDULO FORM HANDLER (v5.0.0 - Multi-Payments Support)
 // Responsabilidade: Gerenciar toda a lógica interna do
-// modal de Pedidos.
+// modal de Pedidos, incluindo lista dinâmica de pagamentos.
 // ==========================================================
 
 import { DOM } from './dom.js';
-
-// CORREÇÃO v4.5.1: Importar direto do especialista para evitar Dependência Circular
 import { updateSourceSelectionUI } from './helpers.js';
+
+// Estado local para gerenciar a lista de pagamentos antes de salvar
+let currentPaymentsList = [];
+
+// API para o Listener pegar os dados
+export const getPaymentList = () => [...currentPaymentsList];
+export const setPaymentList = (list) => { 
+    currentPaymentsList = list || []; 
+    renderPaymentManager();
+    updateFinancials();
+};
+
+const renderPaymentManager = () => {
+    // 1. Identifica ou Cria o Container da Lista
+    let managerContainer = document.getElementById('payment-list-manager');
+    
+    // Se não existir, injetamos logo após o container de inputs original (para não quebrar layout HTML)
+    if (!managerContainer) {
+        // Escondemos os inputs originais visualmente (mas mantemos no DOM por segurança)
+        if (DOM.downPayment) DOM.downPayment.parentElement.style.display = 'none';
+        if (DOM.downPaymentDate) DOM.downPaymentDate.parentElement.style.display = 'none';
+        if (DOM.downPaymentSourceContainer) DOM.downPaymentSourceContainer.style.display = 'none';
+        
+        // O container "Pai" onde tudo vive (Adiantamento / Sinal)
+        const parentSection = DOM.downPayment ? DOM.downPayment.closest('.border') : null;
+        
+        if (parentSection) {
+            managerContainer = document.createElement('div');
+            managerContainer.id = 'payment-list-manager';
+            managerContainer.className = 'mt-2 space-y-3';
+            parentSection.appendChild(managerContainer);
+        }
+    }
+
+    if (!managerContainer) return; // Fallback se o HTML for muito diferente
+
+    // 2. Calcula Totais
+    const totalPaid = currentPaymentsList.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
+
+    // 3. Renderiza o HTML da Lista
+    managerContainer.innerHTML = `
+        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+            <div class="flex flex-wrap gap-2 items-end mb-3 border-b pb-3 border-gray-200">
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs font-bold text-gray-500 mb-1">Valor (R$)</label>
+                    <input type="number" id="new-pay-amount" class="w-full p-2 border rounded text-sm" placeholder="0.00">
+                </div>
+                <div class="w-[130px]">
+                    <label class="block text-xs font-bold text-gray-500 mb-1">Data</label>
+                    <input type="date" id="new-pay-date" class="w-full p-2 border rounded text-sm" value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div class="w-[100px]">
+                    <label class="block text-xs font-bold text-gray-500 mb-1">Conta</label>
+                    <select id="new-pay-source" class="w-full p-2 border rounded text-sm bg-white">
+                        <option value="banco">Banco</option>
+                        <option value="caixa">Caixa</option>
+                    </select>
+                </div>
+                <button type="button" id="btn-add-payment" class="bg-green-500 text-white p-2 rounded hover:bg-green-600 transition-colors h-[38px] w-[38px] flex items-center justify-center" title="Adicionar Pagamento">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+
+            <div class="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar">
+                ${currentPaymentsList.length === 0 ? '<p class="text-xs text-gray-400 text-center italic py-2">Nenhum pagamento lançado.</p>' : ''}
+                ${currentPaymentsList.map((p, index) => `
+                    <div class="flex justify-between items-center bg-white p-2 rounded border border-gray-100 shadow-sm text-sm">
+                        <div class="flex items-center space-x-3">
+                            <span class="font-mono text-gray-500 text-xs">${new Date(p.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                            <span class="font-bold text-gray-700">R$ ${parseFloat(p.amount).toFixed(2)}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full ${p.source === 'banco' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}">${p.source === 'banco' ? 'Banco' : 'Caixa'}</span>
+                        </div>
+                        <button type="button" class="text-red-400 hover:text-red-600 p-1 btn-remove-payment" data-index="${index}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="mt-3 pt-2 border-t border-gray-200 flex justify-between items-center">
+                <span class="text-xs font-bold text-gray-500 uppercase">Total Pago</span>
+                <span class="text-lg font-bold text-green-600">R$ ${totalPaid.toFixed(2)}</span>
+            </div>
+        </div>
+    `;
+
+    // 4. Listeners da Lista (Adicionar e Remover)
+    const addBtn = managerContainer.querySelector('#btn-add-payment');
+    const amountInput = managerContainer.querySelector('#new-pay-amount');
+    const dateInput = managerContainer.querySelector('#new-pay-date');
+    const sourceInput = managerContainer.querySelector('#new-pay-source');
+
+    addBtn.addEventListener('click', () => {
+        const amount = parseFloat(amountInput.value);
+        if (!amount || amount <= 0) return alert('Digite um valor válido.');
+        
+        currentPaymentsList.push({
+            id: null, // Novo pagamento não tem ID ainda
+            amount: amount,
+            date: dateInput.value,
+            source: sourceInput.value,
+            status: 'pago' // Assumimos pago ao lançar aqui
+        });
+        
+        renderPaymentManager();
+        updateFinancials();
+    });
+
+    managerContainer.querySelectorAll('.btn-remove-payment').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.currentTarget.dataset.index);
+            currentPaymentsList.splice(index, 1);
+            renderPaymentManager();
+            updateFinancials();
+        });
+    });
+};
 
 export const updateFinancials = () => {
     let subtotal = 0;
@@ -21,7 +136,12 @@ export const updateFinancials = () => {
 
     const discount = parseFloat(DOM.discount.value) || 0;
     const grandTotal = Math.max(0, subtotal - discount);
-    const downPayment = parseFloat(DOM.downPayment.value) || 0;
+    
+    // v5.0: Agora pega do array, não do input antigo
+    const downPayment = currentPaymentsList.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
+
+    // Sincroniza o input antigo para compatibilidade, se necessário
+    if (DOM.downPayment) DOM.downPayment.value = downPayment > 0 ? downPayment : '';
 
     DOM.grandTotal.textContent = `R$ ${grandTotal.toFixed(2)}`;
     DOM.remainingTotal.textContent = `R$ ${(grandTotal - downPayment).toFixed(2)}`;
@@ -80,7 +200,7 @@ export const renderFinancialSection = () => {
                 if (existingPrices.has(key)) finRow.querySelector('.financial-price').value = existingPrices.get(key);
                 DOM.financialsContainer.appendChild(finRow);
             }
-        } else { // 'detalhado'
+        } else { 
             const totalQty = partItem.querySelectorAll('.detailed-item-row').length;
             if (totalQty > 0) {
                 const finRow = createFinancialRow(partId, partName, totalQty, 'detailed');
@@ -105,10 +225,7 @@ const addContentToPart = (partItem, partData = {}) => {
 
     if (partType === 'comum') {
         const comumTpl = document.getElementById('comumPartContentTemplate').content.cloneNode(true);
-        
         const sizesGrid = comumTpl.querySelector('.sizes-grid');
-        
-        // CORREÇÃO VISUAL v4.5.1: 
         sizesGrid.className = 'sizes-grid hidden mt-3 space-y-4';
 
         const categories = {
@@ -159,7 +276,7 @@ const addContentToPart = (partItem, partData = {}) => {
         sizesGrid.addEventListener('input', renderFinancialSection);
         contentContainer.appendChild(comumTpl);
 
-    } else { // 'detalhado'
+    } else { 
         const detalhadoTpl = document.getElementById('detalhadoPartContentTemplate').content.cloneNode(true);
         const listContainer = detalhadoTpl.querySelector('.detailed-items-list');
         const gridContainer = detalhadoTpl.querySelector('.detailed-sizes-grid-container');
@@ -286,14 +403,16 @@ export const resetForm = () => {
     DOM.existingFilesContainer.innerHTML = '';
     DOM.orderDate.value = new Date().toISOString().split('T')[0];
     
-    DOM.downPaymentDate.value = new Date().toISOString().split('T')[0];
-    DOM.downPaymentStatusPago.checked = true;
-    updateSourceSelectionUI(DOM.downPaymentSourceContainer, 'banco');
+    setPaymentList([]); // Limpa a lista de pagamentos
     
     updateFinancials();
 };
 
 export const populateFormForEdit = (orderData, currentPartCounter) => {
+    // Nota: A lista de pagamentos é populada pelo Listener, 
+    // pois os dados de transação vêm de outro serviço.
+    // Aqui resetamos e preparamos os dados do pedido.
+    
     resetForm();
     
     DOM.orderId.value = orderData.id;
@@ -304,18 +423,12 @@ export const populateFormForEdit = (orderData, currentPartCounter) => {
     DOM.orderDate.value = orderData.orderDate;
     DOM.deliveryDate.value = orderData.deliveryDate;
     DOM.generalObservation.value = orderData.generalObservation;
-    DOM.downPayment.value = orderData.downPayment || '';
+    // DOM.downPayment ignorado propositalmente, usamos a lista agora
     DOM.discount.value = orderData.discount || '';
     
-    // CORREÇÃO v4.5.2: Blindagem do campo paymentMethod, que pode ser NULL no DOM.
     if (DOM.paymentMethod) {
         DOM.paymentMethod.value = orderData.paymentMethod || '';
     }
-    
-    DOM.downPaymentDate.value = orderData.downPaymentDate || new Date().toISOString().split('T')[0];
-    const finStatus = orderData.paymentFinStatus || 'pago';
-    (finStatus === 'a_receber' ? DOM.downPaymentStatusAReceber : DOM.downPaymentStatusPago).checked = true;
-    updateSourceSelectionUI(DOM.downPaymentSourceContainer, orderData.paymentFinSource || 'banco');
 
     DOM.existingFilesContainer.innerHTML = '';
     if (orderData.mockupUrls && orderData.mockupUrls.length) {
