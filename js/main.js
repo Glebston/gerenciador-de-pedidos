@@ -1,6 +1,6 @@
 // js/main.js
 // ========================================================
-// PARTE 1: INICIALIZAÇÃO DINÂMICA (v5.20.1 - HOTFIX BINDING)
+// PARTE 1: INICIALIZAÇÃO DINÂMICA (v5.22.4 - TRUE ZERO)
 // ========================================================
 
 async function main() {
@@ -37,8 +37,8 @@ async function main() {
             saveInitialBalance, 
             getAllTransactions, 
             cleanupFinanceService, 
-            getTransactionByOrderId,        // Mantido para compatibilidade
-            getTransactionsByOrderId,       // NOVO: Importado para suportar lista de pagamentos
+            getTransactionByOrderId,        
+            getTransactionsByOrderId,       
             deleteAllTransactionsByOrderId,
             getTransactionById              
         } = await import(`./services/financeService.js${cacheBuster}`);
@@ -71,8 +71,6 @@ async function main() {
         let orderUpdateDebounce = null;
         let financeUpdateDebounce = null;
 
-        // --- CACHE DE ESTADO GLOBAL ---
-        let globalPendingRevenueCache = 0;
         let lastFilterValue = 'thisMonth';
 
         const defaultOptions = {
@@ -86,14 +84,16 @@ async function main() {
         // ========================================================
         
         const safeRenderFinance = (source, transactions, config, pendingValue) => {
+            // v5.22.4 FIX: Remoção da "Trava de Cache" no Main.js.
+            // Se o pendingValue vier como 0 (porque o usuário apagou tudo), 
+            // devemos confiar nele e enviar 0 para a tela.
+            // A responsabilidade visual agora é 100% do financeRenderer.js
+            
             let finalValue = pendingValue;
 
-            if (pendingValue > 0) {
-                globalPendingRevenueCache = pendingValue;
-            }
-
-            if (finalValue <= 0.01 && globalPendingRevenueCache > 0) {
-                finalValue = globalPendingRevenueCache;
+            // Se for undefined ou null (erro de cálculo), assumimos 0
+            if (finalValue === undefined || finalValue === null) {
+                finalValue = 0;
             }
 
             UI.renderFinanceDashboard(transactions, config, finalValue);
@@ -105,7 +105,7 @@ async function main() {
         // ========================================================
         
         const initializeAppLogic = async (user) => {
-            console.log("🚀 [MAIN] Iniciando lógica da aplicação v5.20.1...");
+            console.log("🚀 [MAIN] Iniciando lógica da aplicação v5.22.4 (True Zero)...");
             const userMappingRef = doc(db, "user_mappings", user.uid);
             const userMappingSnap = await getDoc(userMappingRef);
             
@@ -213,7 +213,6 @@ async function main() {
             if (!filter) filter = 'thisMonth'; 
 
             if (filter !== lastFilterValue) {
-                globalPendingRevenueCache = 0;
                 lastFilterValue = filter;
             }
 
@@ -280,6 +279,7 @@ async function main() {
                 if (orderUpdateDebounce) clearTimeout(orderUpdateDebounce);
                 orderUpdateDebounce = setTimeout(() => {
                     const { startDate, endDate } = getCurrentDashboardDates();
+                    // Aqui passamos o valor cru. Se for zero, é zero.
                     const pendingRevenue = calculateTotalPendingRevenue(startDate, endDate);
                     safeRenderFinance('OrderChange', getAllTransactions ? getAllTransactions() : [], userBankBalanceConfig, pendingRevenue);
                 }, 200);
@@ -485,8 +485,8 @@ async function main() {
                 deleteOrder,
                 saveTransaction,
                 deleteTransaction,
-                getTransactionByOrderId,        // Legacy (Singular)
-                getTransactionsByOrderId,       // NOVO: Passado para o listener usar a lista
+                getTransactionByOrderId,        
+                getTransactionsByOrderId,       
                 deleteAllTransactionsByOrderId
             },
             userCompanyName: () => userCompanyName 
@@ -499,7 +499,12 @@ async function main() {
         FinanceUIProxy.renderFinanceDashboard = (transactions, config, pendingReceived) => {
             const { startDate, endDate } = getCurrentDashboardDates();
             const authoritativePending = calculateTotalPendingRevenue(startDate, endDate);
-            let finalPending = authoritativePending > 0 ? authoritativePending : pendingReceived;
+            
+            // Aqui também removemos a lógica que preferia o cache.
+            // Se calculateTotalPendingRevenue retornar 0, é 0.
+            let finalPending = authoritativePending;
+            if (finalPending === undefined) finalPending = 0;
+
             safeRenderFinance('ListenerProxy', transactions, config, finalPending);
         };
 
