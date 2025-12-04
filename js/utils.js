@@ -1,5 +1,6 @@
+// js/utils.js
 // =========================================================================
-// v4.2.2k - CORREÇÃO DA IMPORTAÇÃO (Patch Manual para ESM Nativo)
+// v5.23.1 - IDLE TIMER UX FIX & PDF PATCH
 // =========================================================================
 // 1. Importa a classe jsPDF
 import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
@@ -57,38 +58,68 @@ export const sortSizes = (sizesObject) => {
 };
 
 
-// --- Lógica do Timer de Inatividade ---
+// --- Lógica do Timer de Inatividade (REFATORADA v5.23.1) ---
 
 let idleTimeout, countdownInterval;
-let domElements, logoutHandlerCallback; // Dependências injetadas
+let domElements, logoutHandlerCallback; 
+let lastActivityTime = Date.now();
 
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000; 
+// AUMENTADO: Tempo base agora é 30 minutos (antes era 15)
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; 
 const COUNTDOWN_SECONDS = 60;
 
 const startCountdown = () => {
-    domElements.idleModal.classList.remove('hidden');
-    let secondsLeft = COUNTDOWN_SECONDS;
-    domElements.countdownTimer.textContent = secondsLeft;
-    countdownInterval = setInterval(() => {
-        secondsLeft--;
-        domElements.countdownTimer.textContent = secondsLeft;
-        if (secondsLeft <= 0) {
-            clearInterval(countdownInterval);
-            if (logoutHandlerCallback) logoutHandlerCallback();
+    // Só exibe o modal se o DOM estiver pronto
+    if (domElements && domElements.idleModal) {
+        domElements.idleModal.classList.remove('hidden');
+        let secondsLeft = COUNTDOWN_SECONDS;
+        
+        if (domElements.countdownTimer) {
+            domElements.countdownTimer.textContent = secondsLeft;
         }
-    }, 1000);
+
+        countdownInterval = setInterval(() => {
+            secondsLeft--;
+            if (domElements.countdownTimer) {
+                domElements.countdownTimer.textContent = secondsLeft;
+            }
+            if (secondsLeft <= 0) {
+                clearInterval(countdownInterval);
+                if (logoutHandlerCallback) logoutHandlerCallback();
+            }
+        }, 1000);
+    }
 };
 
 export const resetIdleTimer = () => {
-    if (!domElements || !logoutHandlerCallback) return; // Não executa se não for inicializado
+    if (!domElements || !logoutHandlerCallback) return; 
+    
+    // Limpa timers anteriores
     clearTimeout(idleTimeout);
     clearInterval(countdownInterval);
-    domElements.idleModal.classList.add('hidden');
+    
+    // Esconde modal se estiver visível
+    if (domElements.idleModal) {
+        domElements.idleModal.classList.add('hidden');
+    }
+    
+    // Reinicia contagem
     idleTimeout = setTimeout(startCountdown, IDLE_TIMEOUT_MS);
 };
 
+// Função Wrapper com Throttle (Otimização de Performance)
+// Evita chamar resetIdleTimer milhares de vezes por segundo ao mover o mouse
+const handleUserActivity = () => {
+    const now = Date.now();
+    // Só reseta se passou mais de 1 segundo desde a última atividade registrada
+    if (now - lastActivityTime > 1000) {
+        lastActivityTime = now;
+        resetIdleTimer();
+    }
+};
+
 /**
- * Inicializa o timer de inatividade, recebendo as dependências necessárias.
+ * Inicializa o timer de inatividade com sensores de atividade.
  * @param {object} dom - A referência para o objeto DOM do ui.js.
  * @param {function} logoutHandler - A função de logout a ser chamada quando o tempo esgotar.
  */
@@ -96,7 +127,18 @@ export const initializeIdleTimer = (dom, logoutHandler) => {
     domElements = dom;
     logoutHandlerCallback = logoutHandler;
     
-    domElements.stayLoggedInBtn.addEventListener('click', resetIdleTimer);
+    if (domElements.stayLoggedInBtn) {
+        domElements.stayLoggedInBtn.addEventListener('click', resetIdleTimer);
+    }
+
+    // --- SENSORES DE ATIVIDADE (A "Audição" do Sistema) ---
+    // Agora o sistema escuta digitação, cliques, movimento e toque.
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    
+    activityEvents.forEach(event => {
+        // 'passive: true' melhora a performance de scroll e touch
+        document.addEventListener(event, handleUserActivity, { passive: true });
+    });
 
     // Inicia o timer pela primeira vez
     resetIdleTimer();
@@ -105,27 +147,7 @@ export const initializeIdleTimer = (dom, logoutHandler) => {
 
 // --- Funções de Geração de PDF ---
 
-/**
- * =========================================================================
- * v4.2.2k - FUNÇÃO DE POLLING REMOVIDA
- * =========================================================================
- * A função 'awaitPdfLibraries' foi removida.
- * Os imports ESM no topo do arquivo garantem que jsPDF e autoTable
- * estejam carregados e o patch aplicado antes que este código seja executado.
- */
-
-/**
- * Gera um PDF detalhado e completo de um pedido específico.
- * @param {string} orderId - O ID do pedido a ser impresso.
- * @param {Array} allOrders - O array completo de todos os pedidos.
- * @param {string} userCompanyName - O nome da empresa do usuário para o cabeçalho.
- * @param {function} showInfoModal - A função para exibir modais de informação.
- */
 export const generateComprehensivePdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
-    
-    // --- LÓGICA v4.2.2k: Bloco try/catch do awaitPdfLibraries removido ---
-    // (Não é mais necessário)
-
     showInfoModal("Iniciando geração do PDF...");
     const order = allOrders.find(o => o.id === orderId);
     if (!order) {
@@ -134,7 +156,6 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
     }
 
     try {
-        // --- MUDANÇA v4.2.2k: Instancia a partir do IMPORT 'jsPDF' ---
         const doc = new jsPDF('p', 'mm', 'a4'); 
         
         const A4_WIDTH = 210;
@@ -163,8 +184,6 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
             [`Data de Entrega:`, `${order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`]
         ];
         
-        // --- MUDANÇA v4.2.2k: Usa a sintaxe de plugin 'doc.autoTable(...)' ---
-        // (Esta chamada estava correta, o problema era a inicialização)
         doc.autoTable({
             body: clientInfo,
             startY: yPosition,
@@ -173,8 +192,6 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
             columnStyles: { 0: { fontStyle: 'bold' } },
             didDrawPage: (data) => { yPosition = data.cursor.y; }
         });
-        // --- MUDANÇA v4.2.2k: Usa 'doc.lastAutoTable' ---
-        // (Esta chamada estava correta)
         yPosition = doc.lastAutoTable.finalY + 5;
 
         // --- TABELA DE PEÇAS ---
@@ -233,7 +250,6 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
             ]);
         });
 
-        // --- MUDANÇA v4.2.2k: Usa a sintaxe de plugin 'doc.autoTable(...)' ---
         doc.autoTable({
             head: tableHead,
             body: tableBody,
@@ -248,7 +264,6 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
             },
             didDrawPage: (data) => { yPosition = data.cursor.y; }
         });
-        // --- MUDANÇA v4.2.2k: Usa 'doc.lastAutoTable' ---
         yPosition = doc.lastAutoTable.finalY + 8;
 
         // --- OBSERVAÇÃO E FINANCEIRO ---
@@ -275,7 +290,6 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
             ['RESTA PAGAR:', `R$ ${remaining.toFixed(2)}`]
         ];
 
-        // --- MUDANÇA v4.2.2k: Usa a sintaxe de plugin 'doc.autoTable(...)' ---
         doc.autoTable({
             body: financialDetails,
             startY: yPosition,
@@ -290,7 +304,6 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
             },
             didDrawPage: (data) => { yPosition = data.cursor.y; }
         });
-        // --- MUDANÇA v4.2.2k: Usa 'doc.lastAutoTable' ---
         yPosition = doc.lastAutoTable.finalY;
 
         // --- IMAGENS ---
@@ -319,14 +332,13 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
                             resolve(canvas.toDataURL('image/jpeg', 0.9));
                         };
                         img.onerror = (err) => reject(new Error(`Falha ao carregar imagem: ${url}`));
-                        // v4.2.2k: Mantém o cache buster
                         img.src = url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`;
                     });
 
                     const imgProps = doc.getImageProperties(imgData);
                     const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
                     
-                    if (yPosition + imgHeight > 280) { // 297 (A4) - MARGIN
+                    if (yPosition + imgHeight > 280) { 
                         doc.addPage();
                         yPosition = MARGIN;
                     }
@@ -350,30 +362,16 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
         showInfoModal("PDF gerado com sucesso!");
 
     } catch (error) {
-        console.error("Erro ao gerar PDF programático (v4.2.2k):", error);
+        console.error("Erro ao gerar PDF programático:", error);
         showInfoModal("Ocorreu um erro inesperado ao gerar o PDF.");
     }
 };
 
-/**
- * =========================================================================
- * v4.2.2k - GERAÇÃO DE RECIBO DE QUITAÇÃO E ENTREGA (ESM CORRIGIDO)
- * =========================================================================
- * Gera um PDF de recibo de quitação E entrega.
- * Corrigido para usar o patch manual (v4.2.2k).
- * @param {object} orderData - O objeto de dados do pedido.
- * @param {string} userCompanyName - O nome da empresa do usuário.
- * @param {function} showInfoModal - A função para exibir modais de informação.
- */
 export const generateReceiptPdf = async (orderData, userCompanyName, showInfoModal) => {
-    
-    // --- LÓGICA v4.2.2k: Bloco try/catch do awaitPdfLibraries removido ---
-    // (Não é mais necessário)
     
     showInfoModal("Gerando recibo...");
 
     try {
-        // 2. Cálculo de Total (LÓGICA CORRIGIDA E COMPLETA)
         let subTotal = 0;
         const tableBody = [];
 
@@ -389,7 +387,6 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
             
             subTotal += (standardSub + specificSub + detailedSub);
             
-            // Adiciona à tabela de itens para o recibo
             if (totalQty > 0) {
                 tableBody.push([p.type, totalQty]);
             }
@@ -397,10 +394,8 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
 
         const discount = orderData.discount || 0;
         const grandTotal = subTotal - discount;
-        const amountPaid = orderData.downPayment || 0; // O fluxo de 'quitar' garante que downPayment == grandTotal
+        const amountPaid = orderData.downPayment || 0; 
 
-        // 3. Inicializa o Documento PDF
-        // --- MUDANÇA v4.2.2k: Instancia a partir do IMPORT 'jsPDF' ---
         const doc = new jsPDF('p', 'mm', 'a4');
         
         const A4_WIDTH = 210;
@@ -441,7 +436,6 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
             ['VALOR PAGO (QUITADO):', `R$ ${amountPaid.toFixed(2)}`]
         ];
         
-        // --- MUDANÇA v4.2.2k: Usa a sintaxe de plugin 'doc.autoTable(...)' ---
         doc.autoTable({
             body: financialDetails,
             startY: yPosition,
@@ -449,22 +443,20 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
             styles: { fontSize: 10, cellPadding: 1.5 },
             columnStyles: { 0: { fontStyle: 'bold' } },
             didParseCell: (data) => {
-                if (data.row.index >= 2) { // Deixa VALOR TOTAL e PAGO em negrito
+                if (data.row.index >= 2) { 
                     data.cell.styles.fontStyle = 'bold';
                 }
             },
             didDrawPage: (data) => { yPosition = data.cursor.y; }
         });
-        // --- MUDANÇA v4.2.2k: Usa 'doc.lastAutoTable' ---
         yPosition = doc.lastAutoTable.finalY + 10;
         
-        // --- ITENS ENTREGUES (Nova Tabela) ---
+        // --- ITENS ENTREGUES ---
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.text('Itens Entregues (Conferência)', MARGIN, yPosition);
         yPosition += 6;
         
-        // --- MUDANÇA v4.2.2k: Usa a sintaxe de plugin 'doc.autoTable(...)' ---
         doc.autoTable({
             head: [['Tipo da Peça', 'Quantidade Total']],
             body: tableBody,
@@ -473,10 +465,9 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
             headStyles: { fillColor: [230, 230, 230], textColor: 20, fontStyle: 'bold' },
             didDrawPage: (data) => { yPosition = data.cursor.y; }
         });
-        // --- MUDANÇA v4.2.2k: Usa 'doc.lastAutoTable' ---
         yPosition = doc.lastAutoTable.finalY + 15;
 
-        // --- TEXTO DE DECLARAÇÃO (Novo) ---
+        // --- TEXTO DE DECLARAÇÃO ---
         doc.setFontSize(11);
         doc.setFont('helvetica', 'italic');
         const declarationText = `Declaro para os devidos fins que recebi os itens listados na tabela acima, conferi as quantidades e que o pedido foi entregue em sua totalidade. Declaro também que o valor total do pedido encontra-se quitado.`;
@@ -491,29 +482,24 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
         doc.text(`Data: ${today}`, MARGIN, yPosition);
         yPosition += 25;
 
-        // --- CAMPOS DE ASSINATURA (Novos) ---
+        // --- CAMPOS DE ASSINATURA ---
         const signatureY = yPosition;
-        const signatureWidth = 80; // Largura da linha de assinatura
+        const signatureWidth = 80; 
         
-        // Assinatura Empresa
-        doc.line(MARGIN, signatureY, MARGIN + signatureWidth, signatureY); // Linha
+        doc.line(MARGIN, signatureY, MARGIN + signatureWidth, signatureY); 
         doc.text(userCompanyName || 'Empresa', MARGIN, signatureY + 6);
         doc.text('(Entregador / Recebedor)', MARGIN, signatureY + 11);
         
-        // Assinatura Cliente
         const clientX = A4_WIDTH - MARGIN - signatureWidth;
-        doc.line(clientX, signatureY, clientX + signatureWidth, signatureY); // Linha
+        doc.line(clientX, signatureY, clientX + signatureWidth, signatureY); 
         doc.text(orderData.clientName || 'Cliente', clientX, signatureY + 6);
         doc.text('(Recebedor do Pedido)', clientX, signatureY + 11);
         
-        // 4. Salva o PDF
         doc.save(`Recibo_Entrega_${orderData.clientName.replace(/\s/g, '_')}.pdf`);
         showInfoModal("Recibo gerado com sucesso!");
 
     } catch (error) {
-        console.error("Erro ao gerar PDF do Recibo (v4.2.2k):", error);
-        // Mensagem de erro genérica, pois o carregamento da lib não é mais o problema
+        console.error("Erro ao gerar PDF do Recibo:", error);
         showInfoModal("Não foi possível gerar o PDF do recibo. Ocorreu um erro interno.");
     }
 };
-
