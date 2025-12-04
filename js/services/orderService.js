@@ -1,6 +1,6 @@
 // js/services/orderService.js
 // ==========================================================
-// MÓDULO ORDER SERVICE (v5.19.0 - SMART ELASTIC DISCOUNT)
+// MÓDULO ORDER SERVICE (v5.23.0 - GRANULAR CALCULATION FIX)
 // ==========================================================
 
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -11,34 +11,53 @@ let dbCollection = null;
 let allOrders = [];           
 let unsubscribeListener = null; 
 
-// --- Funções Auxiliares de Cálculo ---
+// --- Funções Auxiliares de Cálculo (REFATORADA v5.23) ---
 
-const countPartItems = (part) => {
-    let totalQty = 0;
-    if (part.sizes && typeof part.sizes === 'object') {
-        Object.values(part.sizes).forEach(sizesObj => {
-            if (sizesObj && typeof sizesObj === 'object') {
-                Object.values(sizesObj).forEach(qty => {
-                    totalQty += (parseInt(qty) || 0);
-                });
-            }
-        });
-    }
-    if (part.details && Array.isArray(part.details)) {
-        totalQty += part.details.length;
-    }
-    return totalQty;
-};
-
+/**
+ * Calcula o valor total do pedido separando rigorosamente os tipos de peças.
+ * Corrige o bug onde o preço de uma peça personalizada "contaminava" o preço
+ * das peças padrão no mesmo bloco.
+ */
 const calculateOrderTotalValue = (order) => {
     let grossTotal = 0;
+    
     if (order.parts && Array.isArray(order.parts)) {
         order.parts.forEach(part => {
-            const price = parseFloat(part.unitPriceSpecific) || parseFloat(part.unitPriceStandard) || parseFloat(part.unitPrice) || 0;
-            const qty = countPartItems(part);
-            grossTotal += (price * qty);
+            // 1. CÁLCULO DE PEÇAS PADRÃO (Grades P/M/G etc)
+            let standardQty = 0;
+            if (part.sizes && typeof part.sizes === 'object') {
+                Object.values(part.sizes).forEach(sizesObj => {
+                    if (sizesObj && typeof sizesObj === 'object') {
+                        Object.values(sizesObj).forEach(qty => {
+                            standardQty += (parseInt(qty) || 0);
+                        });
+                    }
+                });
+            }
+            // Usa unitPriceStandard. Se não existir, tenta fallback seguro, mas prioriza o específico do grupo.
+            const priceStandard = parseFloat(part.unitPriceStandard) || parseFloat(part.unitPrice) || 0;
+            grossTotal += (standardQty * priceStandard);
+
+            // 2. CÁLCULO DE PEÇAS ESPECÍFICAS (Tamanhos Personalizados)
+            let specificQty = 0;
+            if (part.specifics && Array.isArray(part.specifics)) {
+                specificQty = part.specifics.length;
+            }
+            // Usa unitPriceSpecific.
+            const priceSpecific = parseFloat(part.unitPriceSpecific) || parseFloat(part.unitPrice) || 0;
+            grossTotal += (specificQty * priceSpecific);
+
+            // 3. CÁLCULO DE PEÇAS DETALHADAS (Nome/Número)
+            let detailedQty = 0;
+            if (part.details && Array.isArray(part.details)) {
+                detailedQty = part.details.length;
+            }
+            // Peças detalhadas geralmente usam o campo genérico 'unitPrice' ou têm lógica própria
+            const priceDetailed = parseFloat(part.unitPrice) || 0;
+            grossTotal += (detailedQty * priceDetailed);
         });
     }
+
     const discount = parseFloat(order.discount) || 0;
     return grossTotal - discount;
 };
@@ -50,9 +69,6 @@ const setupFirestoreListener = (granularUpdateCallback, getViewCallback) => {
 
     const q = query(dbCollection);
     unsubscribeListener = onSnapshot(q, (snapshot) => {
-        
-        // Mantendo a correção da v5.18.0:
-        // Notificação individual para garantir que a UI desenhe cada card.
         
         snapshot.docChanges().forEach((change) => {
             const data = { id: change.doc.id, ...change.doc.data() };
@@ -112,23 +128,20 @@ export const getAllOrders = () => {
 export const calculateTotalPendingRevenue = (startDate = null, endDate = null) => {
     if (allOrders.length === 0) return 0;
 
+    // v5.22.0: Estado Absoluto (Ignora Datas)
     const total = allOrders.reduce((acc, order) => {
         const rawStatus = order.orderStatus ? order.orderStatus.trim() : '';
         const status = rawStatus.toLowerCase();
         
         if (status === 'cancelado' || status === 'entregue') return acc;
 
-        if (startDate || endDate) {
-            const orderDateStr = order.orderDate || order.date || (order.createdAt ? order.createdAt.split('T')[0] : null);
-            if (!orderDateStr) return acc; 
-            const orderDate = new Date(orderDateStr + 'T00:00:00');
-            if (isNaN(orderDate.getTime())) return acc; 
-            if (startDate && orderDate < startDate) return acc;
-            if (endDate && orderDate > endDate) return acc;
-        }
-
+        // O cálculo agora usa a lógica GRANULAR (Padrão + Específico + Detalhado)
         const totalOrder = calculateOrderTotalValue(order);
-        const paid = parseFloat(order.downPayment) || 0;
+        
+        // Pagamento agora é baseado no que foi salvo, mas idealmente deveria ser a soma das transações.
+        // Como o orderService é rápido, usamos o campo cacheado 'downPayment' do pedido para performance,
+        // confiando que o orderListeners.js mantém ele atualizado.
+        const paid = parseFloat(order.downPayment) || 0; 
         const remaining = totalOrder - paid;
 
         if (remaining > 0.01) {
@@ -140,7 +153,6 @@ export const calculateTotalPendingRevenue = (startDate = null, endDate = null) =
     return total;
 };
 
-// --- CORREÇÃO DE SINCRONIA FINANCEIRA (v5.19.0) ---
 export const updateOrderDiscountFromFinance = async (orderId, diffValue) => {
     if (!orderId || !dbCollection) return;
     const orderRef = doc(dbCollection, orderId);
@@ -155,20 +167,12 @@ export const updateOrderDiscountFromFinance = async (orderId, diffValue) => {
         downPayment: currentPaid + diffValue
     };
 
-    // Lógica Elástica de Desconto
     if (diffValue < 0) {
-        // Se o pagamento DIMINUIU (diff negativo), o dinheiro sumiu.
-        // Aumentamos o desconto para cobrir a diferença.
         const adjustment = Math.abs(diffValue);
         updates.discount = currentDiscount + adjustment;
     } else if (diffValue > 0) {
-        // Se o pagamento AUMENTOU (diff positivo), o dinheiro apareceu/voltou.
-        // Devemos REDUZIR o desconto proporcionalmente, pois não precisamos mais dele.
         let newDiscount = currentDiscount - diffValue;
-        
-        // Trava de segurança: Desconto nunca pode ser negativo
         if (newDiscount < 0) newDiscount = 0;
-        
         updates.discount = newDiscount;
     }
 
