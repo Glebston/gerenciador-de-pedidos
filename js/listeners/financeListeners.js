@@ -1,6 +1,6 @@
 // js/listeners/financeListeners.js
 // ==========================================================
-// MÓDULO FINANCE LISTENERS (v5.8.4 - SYNC & CALCULATION FIX)
+// MÓDULO FINANCE LISTENERS (v5.22.3 - LINKED DATA PROTECTION)
 // ==========================================================
 
 /**
@@ -13,6 +13,14 @@ function handleEditTransaction(UI, id, getTransactions) {
     const transaction = getTransactions().find(t => t.id === id);
     if (!transaction) return;
     
+    // --- BLINDAGEM DE INTEGRIDADE (v5.22.3) ---
+    // Impede a edição de transações vinculadas a pedidos diretamente pelo Financeiro.
+    // Isso evita que o valor pago (downPayment) do pedido fique dessincronizado.
+    if (transaction.orderId) {
+        UI.showInfoModal("🔒 Esta transação está vinculada a um Pedido.\n\nPara garantir a integridade financeira, edite-a através do botão 'Editar' no Painel de Pedidos.");
+        return;
+    }
+
     UI.DOM.transactionId.value = transaction.id; 
     UI.DOM.transactionDate.value = transaction.date; 
     UI.DOM.transactionDescription.value = transaction.description;
@@ -94,23 +102,10 @@ export function initializeFinanceListeners(UI, deps) {
         try {
             const transactionId = UI.DOM.transactionId.value;
             
-            // LÓGICA DE SINCRONIZAÇÃO DE DESCONTO
-            if (transactionId && services.getTransactionById && services.updateOrderDiscountFromFinance) {
-                const originalTransaction = services.getTransactionById(transactionId);
-
-                // Verifica se tem vínculo com pedido
-                if (originalTransaction && originalTransaction.orderId) {
-                    const oldAmount = parseFloat(originalTransaction.amount) || 0;
-                    const newAmount = data.amount;
-                    const diff = newAmount - oldAmount;
-
-                    // Se o valor mudou significativamente, atualiza o pedido
-                    if (Math.abs(diff) > 0.001) {
-                        await services.updateOrderDiscountFromFinance(originalTransaction.orderId, diff);
-                    }
-                }
-            }
-
+            // REMOVIDA LÓGICA DE SINCRONIZAÇÃO DE DESCONTO (v5.22.3)
+            // Como bloqueamos a edição de transações vinculadas, não precisamos mais
+            // da lógica perigosa que tentava ajustar o desconto automaticamente.
+            
             await services.saveTransaction(data, transactionId);
             
             UI.hideTransactionModal();
@@ -131,11 +126,21 @@ export function initializeFinanceListeners(UI, deps) {
         if (!btn || !btn.dataset.id) return;
         
         const id = btn.dataset.id;
+        const transaction = services.getAllTransactions().find(t => t.id === id);
+
         if (btn.classList.contains('edit-transaction-btn')) {
             handleEditTransaction(UI, id, services.getAllTransactions);
+        
         } else if (btn.classList.contains('delete-transaction-btn')) {
+            // --- BLINDAGEM DE EXCLUSÃO (v5.22.3) ---
+            if (transaction && transaction.orderId) {
+                UI.showInfoModal("🔒 Esta transação está vinculada a um Pedido.\n\nPara excluir este pagamento, vá ao Painel de Pedidos, edite o pedido e remova o pagamento da lista.");
+                return;
+            }
+
             UI.showConfirmModal("Tem certeza que deseja excluir este lançamento?", "Excluir", "Cancelar")
               .then(ok => ok && services.deleteTransaction(id));
+        
         } else if (btn.classList.contains('mark-as-paid-btn')) {
             services.markTransactionAsPaid(id);
         }
@@ -143,12 +148,9 @@ export function initializeFinanceListeners(UI, deps) {
 
     // --- Filtros do Dashboard Financeiro ---
     
-    // Debounce para inputs de texto (Search e Datas Customizadas)
-    // Isso evita que o cálculo seja disparado a cada tecla, dando tempo para o valor estabilizar
     let filterDebounceTimeout;
 
     const renderFullDashboard = () => {
-        // 1. Determina as datas do filtro para passar ao cálculo de pedidos
         const filter = UI.DOM.periodFilter ? UI.DOM.periodFilter.value : 'thisMonth';
         const now = new Date();
         let startDate = null, endDate = null;
@@ -171,14 +173,11 @@ export function initializeFinanceListeners(UI, deps) {
             }
         }
         
-        // Fallback de Segurança se as datas não estiverem definidas (assume mês atual)
         if (!startDate || !endDate) {
              startDate = new Date(now.getFullYear(), now.getMonth(), 1);
              endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
         }
 
-        // 2. Busca o valor atualizado das pendências de pedidos FILTRADO PELA DATA
-        // Adiciona log para debug se necessário
         const pendingRevenue = services.calculateTotalPendingRevenue 
             ? services.calculateTotalPendingRevenue(startDate, endDate) 
             : 0;
@@ -195,7 +194,7 @@ export function initializeFinanceListeners(UI, deps) {
         if(element) {
             element.addEventListener('input', () => {
                 clearTimeout(filterDebounceTimeout);
-                filterDebounceTimeout = setTimeout(renderFullDashboard, 300); // Espera 300ms antes de renderizar
+                filterDebounceTimeout = setTimeout(renderFullDashboard, 300); 
             });
         }
     });
@@ -219,7 +218,6 @@ export function initializeFinanceListeners(UI, deps) {
         UI.DOM.initialBalanceModal.classList.add('hidden');
     });
 
-    // --- Seletor de Fonte (Banco/Caixa) no Modal de Transação ---
     UI.DOM.transactionSourceContainer.addEventListener('click', (e) => {
         const target = e.target.closest('.source-selector');
         if (target) {
