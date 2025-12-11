@@ -1,7 +1,7 @@
 // js/listeners/orderListeners.js
 
-// v5.7.22: REMOVIDA importação estática de UI.
-import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf } from '../utils.js';
+// v5.24.0: Adicionado shareOrderPdf na importação
+import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf, shareOrderPdf } from '../utils.js';
 
 /**
  * Coleta os dados do formulário do pedido.
@@ -300,8 +300,14 @@ export function initializeOrderListeners(UI, deps) {
             UI.hideViewModal();
             UI.DOM.viewModal.innerHTML = ''; 
         }
+        
+        // v5.24.0: Suporte ao novo botão de compartilhar e ao legado de gerar PDF
         if (btn.id === 'comprehensivePdfBtn') {
-            generateComprehensivePdf(btn.dataset.id, services.getAllOrders(), userCompanyName, UI.showInfoModal);
+            generateComprehensivePdf(btn.dataset.id, services.getAllOrders(), userCompanyName(), UI.showInfoModal);
+        }
+        
+        if (btn.id === 'sharePdfBtn') {
+            shareOrderPdf(btn.dataset.id, services.getAllOrders(), userCompanyName(), UI.showInfoModal);
         }
     });
 
