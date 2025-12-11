@@ -1,6 +1,6 @@
 // js/utils.js
 // =========================================================================
-// v5.23.1 - IDLE TIMER UX FIX & PDF PATCH
+// v5.24.0 - SHARE API SUPPORT & PDF REFACTORING
 // =========================================================================
 // 1. Importa a classe jsPDF
 import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
@@ -8,8 +8,6 @@ import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
 import autoTable from "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm";
 
 // 3. APLICA O PATCH MANUALMENTE
-//    Isso resolve o "mismatch de módulos" (duplicação de jsPDF)
-//    garantindo que o plugin se anexe à NOSSA instância da classe jsPDF.
 autoTable.applyPlugin(jsPDF);
 // =========================================================================
 
@@ -19,7 +17,6 @@ const SIZES_ORDER = [
     'PP', 'P', 'M', 'G', 'GG', 'XG',
     '2 anos', '4 anos', '6 anos', '8 anos', '10 anos', '12 anos'
 ];
-
 
 // --- Funções Utilitárias de API e Dados ---
 
@@ -58,18 +55,16 @@ export const sortSizes = (sizesObject) => {
 };
 
 
-// --- Lógica do Timer de Inatividade (REFATORADA v5.23.1) ---
+// --- Lógica do Timer de Inatividade ---
 
 let idleTimeout, countdownInterval;
 let domElements, logoutHandlerCallback; 
 let lastActivityTime = Date.now();
 
-// AUMENTADO: Tempo base agora é 30 minutos (antes era 15)
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; 
 const COUNTDOWN_SECONDS = 60;
 
 const startCountdown = () => {
-    // Só exibe o modal se o DOM estiver pronto
     if (domElements && domElements.idleModal) {
         domElements.idleModal.classList.remove('hidden');
         let secondsLeft = COUNTDOWN_SECONDS;
@@ -94,35 +89,24 @@ const startCountdown = () => {
 export const resetIdleTimer = () => {
     if (!domElements || !logoutHandlerCallback) return; 
     
-    // Limpa timers anteriores
     clearTimeout(idleTimeout);
     clearInterval(countdownInterval);
     
-    // Esconde modal se estiver visível
     if (domElements.idleModal) {
         domElements.idleModal.classList.add('hidden');
     }
     
-    // Reinicia contagem
     idleTimeout = setTimeout(startCountdown, IDLE_TIMEOUT_MS);
 };
 
-// Função Wrapper com Throttle (Otimização de Performance)
-// Evita chamar resetIdleTimer milhares de vezes por segundo ao mover o mouse
 const handleUserActivity = () => {
     const now = Date.now();
-    // Só reseta se passou mais de 1 segundo desde a última atividade registrada
     if (now - lastActivityTime > 1000) {
         lastActivityTime = now;
         resetIdleTimer();
     }
 };
 
-/**
- * Inicializa o timer de inatividade com sensores de atividade.
- * @param {object} dom - A referência para o objeto DOM do ui.js.
- * @param {function} logoutHandler - A função de logout a ser chamada quando o tempo esgotar.
- */
 export const initializeIdleTimer = (dom, logoutHandler) => {
     domElements = dom;
     logoutHandlerCallback = logoutHandler;
@@ -131,22 +115,229 @@ export const initializeIdleTimer = (dom, logoutHandler) => {
         domElements.stayLoggedInBtn.addEventListener('click', resetIdleTimer);
     }
 
-    // --- SENSORES DE ATIVIDADE (A "Audição" do Sistema) ---
-    // Agora o sistema escuta digitação, cliques, movimento e toque.
     const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
-    
     activityEvents.forEach(event => {
-        // 'passive: true' melhora a performance de scroll e touch
         document.addEventListener(event, handleUserActivity, { passive: true });
     });
 
-    // Inicia o timer pela primeira vez
     resetIdleTimer();
 };
 
 
-// --- Funções de Geração de PDF ---
+// --- Funções de Geração de PDF (Refatoradas para Compartilhamento) ---
 
+// Função Privada: Apenas CRIA o documento na memória, não salva.
+// Isso permite reusar a lógica tanto para Download quanto para Compartilhar.
+const _createPdfDocument = async (order, userCompanyName) => {
+    const doc = new jsPDF('p', 'mm', 'a4'); 
+        
+    const A4_WIDTH = 210;
+    const MARGIN = 15;
+    const contentWidth = A4_WIDTH - MARGIN * 2;
+    let yPosition = MARGIN;
+
+    // --- CABEÇALHO ---
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(userCompanyName || 'Relatório de Pedido', A4_WIDTH / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+
+    // --- DADOS DO CLIENTE ---
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Pedido - ${order.clientName}`, MARGIN, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const clientInfo = [
+        [`Telefone:`, `${order.clientPhone || 'N/A'}`],
+        [`Data do Pedido:`, `${order.orderDate ? new Date(order.orderDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`],
+        [`Status:`, `${order.orderStatus}`],
+        [`Data de Entrega:`, `${order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`]
+    ];
+    
+    doc.autoTable({
+        body: clientInfo,
+        startY: yPosition,
+        theme: 'plain',
+        styles: { fontSize: 10, cellPadding: 1 },
+        columnStyles: { 0: { fontStyle: 'bold' } },
+        didDrawPage: (data) => { yPosition = data.cursor.y; }
+    });
+    yPosition = doc.lastAutoTable.finalY + 5;
+
+    // --- TABELA DE PEÇAS ---
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Peças do Pedido', MARGIN, yPosition);
+    yPosition += 6;
+
+    const tableHead = [['Peça / Detalhes', 'Material', 'Cor', 'Qtd', 'V. Un.', 'Subtotal']];
+    const tableBody = [];
+    let subTotal = 0;
+
+    (order.parts || []).forEach(p => {
+        const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+        const specificQty = (p.specifics || []).length;
+        const detailedQty = (p.details || []).length;
+        const totalQty = standardQty + specificQty + detailedQty;
+
+        const standardSub = standardQty * (p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0);
+        const specificSub = specificQty * (p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0);
+        const detailedSub = detailedQty * (p.unitPrice || 0);
+        const partSubtotal = standardSub + specificSub + detailedSub;
+        subTotal += partSubtotal;
+
+        let detailsText = '';
+        if (p.partInputType === 'comum') {
+            if (p.sizes && Object.keys(p.sizes).length > 0) {
+                detailsText += Object.entries(p.sizes).map(([cat, sizes]) =>
+                    `${cat}: ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
+                ).join('\n');
+            }
+            if (p.specifics && p.specifics.length > 0) {
+                detailsText += (detailsText ? '\n' : '') + 'Específicos:\n' + p.specifics.map(s => 
+                    `- L:${s.width||'N/A'}, A:${s.height||'N/A'} (${s.observation||'Sem obs.'})`
+                ).join('\n');
+            }
+        } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
+            detailsText = p.details.map(d => `${d.name||''} - ${d.size||''} - ${d.number||''}`).join('\n');
+        }
+        
+        let unitPriceText = '';
+        if(p.partInputType === 'comum') {
+            if(standardQty > 0) unitPriceText += `R$ ${(p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0).toFixed(2)} (Padrão)\n`;
+            if(specificQty > 0) unitPriceText += `R$ ${(p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0).toFixed(2)} (Específico)`;
+        } else {
+            unitPriceText = `R$ ${(p.unitPrice || 0).toFixed(2)}`;
+        }
+
+        tableBody.push([
+            { content: `${p.type}\n${detailsText}`, styles: { fontSize: 8 } },
+            p.material,
+            p.colorMain,
+            totalQty,
+            { content: unitPriceText.trim(), styles: { halign: 'right' } },
+            { content: `R$ ${partSubtotal.toFixed(2)}`, styles: { halign: 'right' } }
+        ]);
+    });
+
+    doc.autoTable({
+        head: tableHead,
+        body: tableBody,
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [230, 230, 230], textColor: 20, fontStyle: 'bold' },
+        columnStyles: {
+            0: { cellWidth: 60 },
+            3: { halign: 'center' },
+            4: { halign: 'right' },
+            5: { halign: 'right' }
+        },
+        didDrawPage: (data) => { yPosition = data.cursor.y; }
+    });
+    yPosition = doc.lastAutoTable.finalY + 8;
+
+    // --- OBSERVAÇÃO E FINANCEIRO ---
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Observação Geral', MARGIN, yPosition);
+    yPosition += 5;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const obsLines = doc.splitTextToSize(order.generalObservation || 'Nenhuma.', contentWidth);
+    doc.text(obsLines, MARGIN, yPosition);
+    yPosition += (obsLines.length * 4) + 8;
+
+    const discount = order.discount || 0;
+    const grandTotal = subTotal - discount;
+    const remaining = grandTotal - (order.downPayment || 0);
+
+    const financialDetails = [
+        ['Valor Bruto:', `R$ ${subTotal.toFixed(2)}`],
+        ['Desconto:', `R$ ${discount.toFixed(2)}`],
+        ['Adiantamento:', `R$ ${(order.downPayment || 0).toFixed(2)}`],
+        ['Forma de Pgto:', `${order.paymentMethod || 'N/A'}`],
+        ['VALOR TOTAL:', `R$ ${grandTotal.toFixed(2)}`],
+        ['RESTA PAGAR:', `R$ ${remaining.toFixed(2)}`]
+    ];
+
+    doc.autoTable({
+        body: financialDetails,
+        startY: yPosition,
+        theme: 'plain',
+        styles: { fontSize: 10, cellPadding: 1.5 },
+        columnStyles: { 0: { fontStyle: 'bold' } },
+        didParseCell: (data) => {
+            if (data.row.index >= 4) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fontSize = 12;
+            }
+        },
+        didDrawPage: (data) => { yPosition = data.cursor.y; }
+    });
+    yPosition = doc.lastAutoTable.finalY;
+
+    // --- IMAGENS ---
+    if (order.mockupUrls && order.mockupUrls.length > 0) {
+        yPosition += 10;
+        if (yPosition > 250) { 
+            doc.addPage();
+            yPosition = MARGIN;
+        }
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Arquivos (Mockups)', MARGIN, yPosition);
+        yPosition += 8;
+        
+        for (const url of order.mockupUrls) {
+            try {
+                const imgData = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = 'Anonymous';
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        resolve(canvas.toDataURL('image/jpeg', 0.9));
+                    };
+                    img.onerror = (err) => reject(new Error(`Falha ao carregar imagem: ${url}`));
+                    img.src = url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`;
+                });
+
+                const imgProps = doc.getImageProperties(imgData);
+                const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+                
+                if (yPosition + imgHeight > 280) { 
+                    doc.addPage();
+                    yPosition = MARGIN;
+                }
+                
+                doc.addImage(imgData, 'JPEG', MARGIN, yPosition, contentWidth, imgHeight);
+                yPosition += imgHeight + 5;
+
+            } catch (imgError) {
+                console.error(imgError);
+                if (yPosition > 280) { doc.addPage(); yPosition = MARGIN; }
+                doc.setFontSize(9);
+                doc.setTextColor(150);
+                doc.text(`- Não foi possível carregar a imagem.`, MARGIN, yPosition);
+                yPosition += 5;
+                doc.setTextColor(0);
+            }
+        }
+    }
+    
+    return { 
+        doc, 
+        filename: `Pedido_${order.clientName.replace(/\s/g, '_')}.pdf`
+    };
+};
+
+// 1. GERAÇÃO E DOWNLOAD (Comportamento Antigo)
 export const generateComprehensivePdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
     showInfoModal("Iniciando geração do PDF...");
     const order = allOrders.find(o => o.id === orderId);
@@ -156,214 +347,57 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
     }
 
     try {
-        const doc = new jsPDF('p', 'mm', 'a4'); 
-        
-        const A4_WIDTH = 210;
-        const MARGIN = 15;
-        const contentWidth = A4_WIDTH - MARGIN * 2;
-        let yPosition = MARGIN;
-
-        // --- CABEÇALHO ---
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text(userCompanyName || 'Relatório de Pedido', A4_WIDTH / 2, yPosition, { align: 'center' });
-        yPosition += 10;
-
-        // --- DADOS DO CLIENTE ---
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`Pedido - ${order.clientName}`, MARGIN, yPosition);
-        yPosition += 8;
-
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        const clientInfo = [
-            [`Telefone:`, `${order.clientPhone || 'N/A'}`],
-            [`Data do Pedido:`, `${order.orderDate ? new Date(order.orderDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`],
-            [`Status:`, `${order.orderStatus}`],
-            [`Data de Entrega:`, `${order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`]
-        ];
-        
-        doc.autoTable({
-            body: clientInfo,
-            startY: yPosition,
-            theme: 'plain',
-            styles: { fontSize: 10, cellPadding: 1 },
-            columnStyles: { 0: { fontStyle: 'bold' } },
-            didDrawPage: (data) => { yPosition = data.cursor.y; }
-        });
-        yPosition = doc.lastAutoTable.finalY + 5;
-
-        // --- TABELA DE PEÇAS ---
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Peças do Pedido', MARGIN, yPosition);
-        yPosition += 6;
-
-        const tableHead = [['Peça / Detalhes', 'Material', 'Cor', 'Qtd', 'V. Un.', 'Subtotal']];
-        const tableBody = [];
-        let subTotal = 0;
-
-        (order.parts || []).forEach(p => {
-            const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
-            const specificQty = (p.specifics || []).length;
-            const detailedQty = (p.details || []).length;
-            const totalQty = standardQty + specificQty + detailedQty;
-
-            const standardSub = standardQty * (p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0);
-            const specificSub = specificQty * (p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0);
-            const detailedSub = detailedQty * (p.unitPrice || 0);
-            const partSubtotal = standardSub + specificSub + detailedSub;
-            subTotal += partSubtotal;
-
-            let detailsText = '';
-            if (p.partInputType === 'comum') {
-                if (p.sizes && Object.keys(p.sizes).length > 0) {
-                    detailsText += Object.entries(p.sizes).map(([cat, sizes]) =>
-                        `${cat}: ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
-                    ).join('\n');
-                }
-                if (p.specifics && p.specifics.length > 0) {
-                    detailsText += (detailsText ? '\n' : '') + 'Específicos:\n' + p.specifics.map(s => 
-                        `- L:${s.width||'N/A'}, A:${s.height||'N/A'} (${s.observation||'Sem obs.'})`
-                    ).join('\n');
-                }
-            } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
-                detailsText = p.details.map(d => `${d.name||''} - ${d.size||''} - ${d.number||''}`).join('\n');
-            }
-            
-            let unitPriceText = '';
-            if(p.partInputType === 'comum') {
-                if(standardQty > 0) unitPriceText += `R$ ${(p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0).toFixed(2)} (Padrão)\n`;
-                if(specificQty > 0) unitPriceText += `R$ ${(p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0).toFixed(2)} (Específico)`;
-            } else {
-                unitPriceText = `R$ ${(p.unitPrice || 0).toFixed(2)}`;
-            }
-
-            tableBody.push([
-                { content: `${p.type}\n${detailsText}`, styles: { fontSize: 8 } },
-                p.material,
-                p.colorMain,
-                totalQty,
-                { content: unitPriceText.trim(), styles: { halign: 'right' } },
-                { content: `R$ ${partSubtotal.toFixed(2)}`, styles: { halign: 'right' } }
-            ]);
-        });
-
-        doc.autoTable({
-            head: tableHead,
-            body: tableBody,
-            startY: yPosition,
-            theme: 'grid',
-            headStyles: { fillColor: [230, 230, 230], textColor: 20, fontStyle: 'bold' },
-            columnStyles: {
-                0: { cellWidth: 60 },
-                3: { halign: 'center' },
-                4: { halign: 'right' },
-                5: { halign: 'right' }
-            },
-            didDrawPage: (data) => { yPosition = data.cursor.y; }
-        });
-        yPosition = doc.lastAutoTable.finalY + 8;
-
-        // --- OBSERVAÇÃO E FINANCEIRO ---
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Observação Geral', MARGIN, yPosition);
-        yPosition += 5;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'normal');
-        const obsLines = doc.splitTextToSize(order.generalObservation || 'Nenhuma.', contentWidth);
-        doc.text(obsLines, MARGIN, yPosition);
-        yPosition += (obsLines.length * 4) + 8;
-
-        const discount = order.discount || 0;
-        const grandTotal = subTotal - discount;
-        const remaining = grandTotal - (order.downPayment || 0);
-
-        const financialDetails = [
-            ['Valor Bruto:', `R$ ${subTotal.toFixed(2)}`],
-            ['Desconto:', `R$ ${discount.toFixed(2)}`],
-            ['Adiantamento:', `R$ ${(order.downPayment || 0).toFixed(2)}`],
-            ['Forma de Pgto:', `${order.paymentMethod || 'N/A'}`],
-            ['VALOR TOTAL:', `R$ ${grandTotal.toFixed(2)}`],
-            ['RESTA PAGAR:', `R$ ${remaining.toFixed(2)}`]
-        ];
-
-        doc.autoTable({
-            body: financialDetails,
-            startY: yPosition,
-            theme: 'plain',
-            styles: { fontSize: 10, cellPadding: 1.5 },
-            columnStyles: { 0: { fontStyle: 'bold' } },
-            didParseCell: (data) => {
-                if (data.row.index >= 4) {
-                    data.cell.styles.fontStyle = 'bold';
-                    data.cell.styles.fontSize = 12;
-                }
-            },
-            didDrawPage: (data) => { yPosition = data.cursor.y; }
-        });
-        yPosition = doc.lastAutoTable.finalY;
-
-        // --- IMAGENS ---
-        if (order.mockupUrls && order.mockupUrls.length > 0) {
-            yPosition += 10;
-            if (yPosition > 250) { 
-                doc.addPage();
-                yPosition = MARGIN;
-            }
-            doc.setFontSize(12);
-            doc.setFont('helvetica', 'bold');
-            doc.text('Arquivos (Mockups)', MARGIN, yPosition);
-            yPosition += 8;
-            
-            for (const url of order.mockupUrls) {
-                try {
-                    const imgData = await new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.crossOrigin = 'Anonymous';
-                        img.onload = () => {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = img.width;
-                            canvas.height = img.height;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0);
-                            resolve(canvas.toDataURL('image/jpeg', 0.9));
-                        };
-                        img.onerror = (err) => reject(new Error(`Falha ao carregar imagem: ${url}`));
-                        img.src = url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`;
-                    });
-
-                    const imgProps = doc.getImageProperties(imgData);
-                    const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
-                    
-                    if (yPosition + imgHeight > 280) { 
-                        doc.addPage();
-                        yPosition = MARGIN;
-                    }
-                    
-                    doc.addImage(imgData, 'JPEG', MARGIN, yPosition, contentWidth, imgHeight);
-                    yPosition += imgHeight + 5;
-
-                } catch (imgError) {
-                    console.error(imgError);
-                    if (yPosition > 280) { doc.addPage(); yPosition = MARGIN; }
-                    doc.setFontSize(9);
-                    doc.setTextColor(150);
-                    doc.text(`- Não foi possível carregar a imagem.`, MARGIN, yPosition);
-                    yPosition += 5;
-                    doc.setTextColor(0);
-                }
-            }
-        }
-        
-        doc.save(`Pedido_${order.clientName.replace(/\s/g, '_')}.pdf`);
+        const { doc, filename } = await _createPdfDocument(order, userCompanyName);
+        doc.save(filename);
         showInfoModal("PDF gerado com sucesso!");
 
     } catch (error) {
         console.error("Erro ao gerar PDF programático:", error);
         showInfoModal("Ocorreu um erro inesperado ao gerar o PDF.");
+    }
+};
+
+// 2. COMPARTILHAMENTO NATIVO (Novo Comportamento)
+export const shareOrderPdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
+    // Verificação de suporte do navegador
+    if (!navigator.share) {
+        showInfoModal("Seu dispositivo ou navegador não suporta compartilhamento direto.");
+        return;
+    }
+
+    showInfoModal("Preparando arquivo para compartilhar...");
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order) {
+        showInfoModal("Erro: Pedido não encontrado.");
+        return;
+    }
+
+    try {
+        // Gera o PDF na memória
+        const { doc, filename } = await _createPdfDocument(order, userCompanyName);
+        
+        // Converte o PDF para um objeto File (Arquivo Virtual)
+        const pdfBlob = doc.output('blob');
+        const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+        // Verifica se o navegador permite compartilhar arquivos
+        if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+            await navigator.share({
+                files: [pdfFile],
+                title: filename,
+                text: `Segue em anexo o pedido de ${order.clientName}`
+            });
+            // Sucesso silencioso (o usuário já vê a gaveta de apps)
+        } else {
+            showInfoModal("O navegador bloqueou o compartilhamento deste tipo de arquivo.");
+        }
+
+    } catch (error) {
+        // Ignora erro se o usuário cancelou a gaveta de compartilhamento
+        if (error.name !== 'AbortError') {
+            console.error("Erro ao compartilhar PDF:", error);
+            showInfoModal("Erro ao tentar compartilhar o arquivo.");
+        }
     }
 };
 
@@ -397,7 +431,6 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
         const amountPaid = orderData.downPayment || 0; 
 
         const doc = new jsPDF('p', 'mm', 'a4');
-        
         const A4_WIDTH = 210;
         const MARGIN = 15;
         const contentWidth = A4_WIDTH - MARGIN * 2;
