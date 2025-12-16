@@ -1,5 +1,5 @@
 // ==========================================================
-// MÓDULO DOM (v4.3.0 - Patch v5.8.2)
+// MÓDULO DOM (v4.3.0 - Patch v5.8.3 - FAB UPDATE)
 // Responsabilidade: Centralizar todos os seletores de 
 // elementos do DOM da aplicação.
 // ==========================================================
@@ -157,7 +157,7 @@ export const DOM = {
     transactionType: document.getElementById('transactionType'),
     cancelTransactionBtn: document.getElementById('cancelTransactionBtn'),
     
-    // Campos adicionados na v5.8.1 - Se o HTML não tiver estes IDs, estas variáveis serão NULL
+    // Campos adicionados na v5.8.1
     transactionStatusContainer: document.getElementById('transactionStatusContainer'),
     pago: document.querySelector('input[name="transactionStatus"][value="pago"]'),
     a_receber: document.querySelector('input[name="transactionStatus"][value="a_receber"]'),
@@ -175,4 +175,11 @@ export const DOM = {
     backupReminderBanner: document.getElementById('backupReminderBanner'),
     backupNowBtn: document.getElementById('backupNowBtn'),
     dismissBackupReminderBtn: document.getElementById('dismissBackupReminderBtn'),
+
+    // --- Ações Rápidas (FAB) ---
+    fabContainer: document.getElementById('fabContainer'),
+    fabToggleBtn: document.getElementById('fabToggleBtn'),
+    fabActions: document.getElementById('fabActions'),
+    fabAddIncomeBtn: document.getElementById('fabAddIncomeBtn'),
+    fabAddExpenseBtn: document.getElementById('fabAddExpenseBtn'),
 };
