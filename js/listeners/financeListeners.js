@@ -1,6 +1,6 @@
 // js/listeners/financeListeners.js
 // ==========================================================
-// MÓDULO FINANCE LISTENERS (v5.22.3 - LINKED DATA PROTECTION)
+// MÓDULO FINANCE LISTENERS (v5.22.4 - FAB INTEGRATION)
 // ==========================================================
 
 /**
@@ -13,9 +13,7 @@ function handleEditTransaction(UI, id, getTransactions) {
     const transaction = getTransactions().find(t => t.id === id);
     if (!transaction) return;
     
-    // --- BLINDAGEM DE INTEGRIDADE (v5.22.3) ---
-    // Impede a edição de transações vinculadas a pedidos diretamente pelo Financeiro.
-    // Isso evita que o valor pago (downPayment) do pedido fique dessincronizado.
+    // --- BLINDAGEM DE INTEGRIDADE ---
     if (transaction.orderId) {
         UI.showInfoModal("🔒 Esta transação está vinculada a um Pedido.\n\nPara garantir a integridade financeira, edite-a através do botão 'Editar' no Painel de Pedidos.");
         return;
@@ -42,6 +40,58 @@ function handleEditTransaction(UI, id, getTransactions) {
 }
 
 /**
+ * Inicializa a lógica do Botão de Ação Flutuante (FAB).
+ * Simula cliques nos botões originais para evitar duplicação de regra de negócio.
+ */
+function initializeFabListeners(UI) {
+    // Verifica se os elementos existem para evitar erros em páginas que não tenham o FAB
+    if (!UI.DOM.fabToggleBtn || !UI.DOM.fabActions) return;
+
+    // 1. Abrir/Fechar Menu
+    UI.DOM.fabToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Evita fechar imediatamente ao clicar
+        const isExpanded = UI.DOM.fabToggleBtn.getAttribute('aria-expanded') === 'true';
+        
+        if (isExpanded) {
+            UI.DOM.fabActions.classList.add('hidden');
+            UI.DOM.fabToggleBtn.setAttribute('aria-expanded', 'false');
+            UI.DOM.fabToggleBtn.classList.remove('rotate-45'); // Remove rotação do ícone
+        } else {
+            UI.DOM.fabActions.classList.remove('hidden');
+            UI.DOM.fabToggleBtn.setAttribute('aria-expanded', 'true');
+            UI.DOM.fabToggleBtn.classList.add('rotate-45'); // Adiciona rotação para virar um "X"
+        }
+    });
+
+    // 2. Fechar ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!UI.DOM.fabContainer.contains(e.target)) {
+            UI.DOM.fabActions.classList.add('hidden');
+            UI.DOM.fabToggleBtn.setAttribute('aria-expanded', 'false');
+            UI.DOM.fabToggleBtn.classList.remove('rotate-45');
+        }
+    });
+
+    // 3. Ação: Nova Receita (Simula clique no botão original)
+    if (UI.DOM.fabAddIncomeBtn) {
+        UI.DOM.fabAddIncomeBtn.addEventListener('click', () => {
+            UI.DOM.fabActions.classList.add('hidden'); // Fecha o menu
+            UI.DOM.fabToggleBtn.classList.remove('rotate-45');
+            UI.DOM.addIncomeBtn.click(); // Dispara a lógica existente
+        });
+    }
+
+    // 4. Ação: Nova Despesa (Simula clique no botão original)
+    if (UI.DOM.fabAddExpenseBtn) {
+        UI.DOM.fabAddExpenseBtn.addEventListener('click', () => {
+            UI.DOM.fabActions.classList.add('hidden'); // Fecha o menu
+            UI.DOM.fabToggleBtn.classList.remove('rotate-45');
+            UI.DOM.addExpenseBtn.click(); // Dispara a lógica existente
+        });
+    }
+}
+
+/**
  * Inicializa todos os event listeners relacionados ao Dashboard Financeiro.
  * @param {object} UI - O módulo UI (injetado)
  * @param {object} deps - Dependências injetadas
@@ -49,6 +99,9 @@ function handleEditTransaction(UI, id, getTransactions) {
 export function initializeFinanceListeners(UI, deps) {
 
     const { services, getConfig, setConfig } = deps;
+
+    // Inicializa o FAB (Novo v5.22.4)
+    initializeFabListeners(UI);
 
     // --- Botões "Nova Entrada" / "Nova Despesa" ---
     UI.DOM.addIncomeBtn.addEventListener('click', () => { 
@@ -102,10 +155,6 @@ export function initializeFinanceListeners(UI, deps) {
         try {
             const transactionId = UI.DOM.transactionId.value;
             
-            // REMOVIDA LÓGICA DE SINCRONIZAÇÃO DE DESCONTO (v5.22.3)
-            // Como bloqueamos a edição de transações vinculadas, não precisamos mais
-            // da lógica perigosa que tentava ajustar o desconto automaticamente.
-            
             await services.saveTransaction(data, transactionId);
             
             UI.hideTransactionModal();
@@ -132,7 +181,6 @@ export function initializeFinanceListeners(UI, deps) {
             handleEditTransaction(UI, id, services.getAllTransactions);
         
         } else if (btn.classList.contains('delete-transaction-btn')) {
-            // --- BLINDAGEM DE EXCLUSÃO (v5.22.3) ---
             if (transaction && transaction.orderId) {
                 UI.showInfoModal("🔒 Esta transação está vinculada a um Pedido.\n\nPara excluir este pagamento, vá ao Painel de Pedidos, edite o pedido e remova o pagamento da lista.");
                 return;
