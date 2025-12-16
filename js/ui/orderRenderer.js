@@ -1,5 +1,5 @@
 // ==========================================================
-// MÓDULO ORDER RENDERER (v5.24.0 - SHARE BUTTON ADDED)
+// MÓDULO ORDER RENDERER (v5.25.0 - WHATSAPP BUTTON ADDED)
 // Responsabilidade: Gerenciar a renderização de tudo 
 // relacionado a Pedidos: Kanban, Cards, Modal de Detalhes.
 // ==========================================================
@@ -105,8 +105,6 @@ const setupOrderListContainer = (viewType) => {
 
 /**
  * Procura ou cria uma coluna no Kanban
- * @param {string} dateKey - O 'data-date-key' (ex: '2025-10-31' ou 'Sem Data')
- * @returns {HTMLElement} O elemento do container de cards da coluna
  */
 const findOrCreateKanbanColumn = (dateKey) => {
     let column = DOM.ordersList.querySelector(`.kanban-column[data-date-key="${dateKey}"]`);
@@ -154,7 +152,6 @@ const findOrCreateKanbanColumn = (dateKey) => {
 
 /**
  * Atualiza o contador de uma coluna Kanban
- * @param {HTMLElement} columnContent - O elemento '.kanban-column-content'
  */
 const updateKanbanColumnCounter = (columnContent) => {
     const column = columnContent.closest('.kanban-column');
@@ -222,7 +219,6 @@ export const addOrderCard = (order, viewType) => {
 export const updateOrderCard = (order, viewType) => {
     const existingCard = DOM.ordersList.querySelector(`[data-id="${order.id}"]`);
     if (!existingCard) {
-        // Se não existia (ex: mudou de 'Entregue' para 'Pendente'), apenas adiciona
         addOrderCard(order, viewType);
         return;
     }
@@ -230,55 +226,43 @@ export const updateOrderCard = (order, viewType) => {
     const oldColumnContent = existingCard.closest('.kanban-column-content');
     const newCard = generateOrderCardHTML(order, viewType);
 
-    // Substitui o card antigo pelo novo
     existingCard.replaceWith(newCard);
     
     if (viewType === 'pending') {
         const newDateKey = order.deliveryDate || 'Sem Data';
         const newColumnContent = findOrCreateKanbanColumn(newDateKey);
         
-        // Se a coluna for diferente, move o card
         if (newColumnContent !== oldColumnContent) {
-            newColumnContent.appendChild(newCard); // Adiciona na nova coluna
+            newColumnContent.appendChild(newCard);
             if (oldColumnContent) {
-                updateKanbanColumnCounter(oldColumnContent); // Atualiza contador da antiga
+                updateKanbanColumnCounter(oldColumnContent);
             }
         }
-        updateKanbanColumnCounter(newColumnContent); // Atualiza contador da nova
+        updateKanbanColumnCounter(newColumnContent);
     }
 };
 
-/**
- * Remove um card de pedido da UI
- */
 export const removeOrderCard = (orderId) => {
     const card = DOM.ordersList.querySelector(`[data-id="${orderId}"]`);
     if (card) {
         const columnContent = card.closest('.kanban-column-content');
         card.remove();
         if (columnContent) {
-            updateKanbanColumnCounter(columnContent); // Atualiza o contador da coluna
+            updateKanbanColumnCounter(columnContent);
         }
     }
     
-    // Se a lista estiver vazia, mostra a mensagem
     if (DOM.ordersList.children.length === 0) {
         showOrdersPlaceholder(DOM.ordersList.classList.contains('kanban-board') ? 'pending' : 'delivered');
     }
 };
 
-/**
- * Exibe a mensagem de "Nenhum pedido"
- */
 const showOrdersPlaceholder = (viewType) => {
     const message = viewType === 'pending' ? 'Nenhum pedido pendente.' : 'Nenhum pedido entregue encontrado.';
     const colSpanClass = viewType === 'pending' ? 'w-full' : 'col-span-full';
     DOM.ordersList.innerHTML = `<div class="${colSpanClass} text-center py-10 text-gray-500 orders-placeholder">${message}</div>`;
 };
 
-/**
- * Função principal de renderização inicial de pedidos
- */
 export const renderOrders = (allOrders, currentOrdersView) => {
     DOM.loadingIndicator.style.display = 'none';
     setupOrderListContainer(currentOrdersView);
@@ -287,7 +271,6 @@ export const renderOrders = (allOrders, currentOrdersView) => {
     
     if (currentOrdersView === 'pending') {
         ordersToRender = allOrders.filter(o => o.orderStatus !== 'Entregue');
-        // Ordena por data e depois por nome
         ordersToRender.sort((a, b) => {
             const dateA = a.deliveryDate || '9999-12-31';
             const dateB = b.deliveryDate || '9999-12-31';
@@ -296,8 +279,6 @@ export const renderOrders = (allOrders, currentOrdersView) => {
         });
     } else { 
         ordersToRender = allOrders.filter(o => o.orderStatus === 'Entregue');
-        
-        // v4.2.4: Ordena por data (mais novos primeiro)
         ordersToRender.sort((a, b) => {
             const dateA = a.deliveryDate || '0000-01-01';
             const dateB = b.deliveryDate || '0000-01-01';
@@ -310,7 +291,6 @@ export const renderOrders = (allOrders, currentOrdersView) => {
         return;
     }
     
-    // Chama a função granular para construir a UI inicial
     ordersToRender.forEach(order => addOrderCard(order, currentOrdersView));
 };
 
@@ -388,7 +368,6 @@ export const viewOrder = (order) => {
     const grandTotal = subTotal - discount;
     const remaining = grandTotal - (order.downPayment || 0);
     
-    // v5.0: Adiciona detalhes do adiantamento
     const paymentFinSourceText = order.paymentFinSource === 'caixa' ? 'Caixa' : (order.paymentFinSource === 'banco' ? 'Banco' : 'N/A');
     const paymentFinStatusText = order.paymentFinStatus === 'a_receber' ? 'A Receber' : 'Recebido';
     const downPaymentDateText = order.downPaymentDate ? new Date(order.downPaymentDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A';
@@ -435,6 +414,12 @@ export const viewOrder = (order) => {
                 </div>
             </div>
             <div class="p-4 bg-gray-100 border-t flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
+                <button id="whatsappBtn" data-id="${order.id}" class="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 hover:bg-green-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                    </svg>
+                    WhatsApp
+                </button>
                 <button id="sharePdfBtn" data-id="${order.id}" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
