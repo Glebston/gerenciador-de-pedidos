@@ -1,23 +1,32 @@
 // js/main.js
 // ========================================================
-// PARTE 1: INICIALIZAÇÃO DINÂMICA (v5.22.4 - TRUE ZERO)
+// ORQUESTRADOR CENTRAL (v5.8.0 - SaaS Manager Logic)
 // ========================================================
 
 async function main() {
     
+    // Cache Buster para garantir que o navegador baixe as novas versões dos módulos
     const cacheBuster = `?v=${new Date().getTime()}`;
 
     try {
         // ========================================================
-        // PARTE 1.A: IMPORTAÇÕES DINÂMICAS DE MÓCULOS
+        // 1. IMPORTAÇÕES DINÂMICAS (Lazy Loading)
         // ========================================================
 
         const { onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
-        const { doc, getDoc, writeBatch, collection } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { 
+            doc, 
+            getDoc, 
+            updateDoc, 
+            serverTimestamp, 
+            writeBatch, 
+            collection 
+        } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
         
         const { db, auth } = await import(`./firebaseConfig.js${cacheBuster}`);
         const { handleLogout } = await import(`./auth.js${cacheBuster}`);
 
+        // Serviços (Regras de Negócio)
         const { 
             initializeOrderService, 
             saveOrder, 
@@ -43,11 +52,18 @@ async function main() {
             getTransactionById              
         } = await import(`./services/financeService.js${cacheBuster}`);
         
-        const { initializePricingService, savePriceTableChanges, deletePriceItem, getAllPricingItems, cleanupPricingService } = await import(`./services/pricingService.js${cacheBuster}`);
-        const { initializeIdleTimer } = await import(`./utils.js${cacheBuster}`);
+        const { 
+            initializePricingService, 
+            savePriceTableChanges, 
+            deletePriceItem, 
+            getAllPricingItems, 
+            cleanupPricingService 
+        } = await import(`./services/pricingService.js${cacheBuster}`);
         
+        const { initializeIdleTimer } = await import(`./utils.js${cacheBuster}`);
         const UI = await import(`./ui.js${cacheBuster}`);
 
+        // Listeners (Interações do Usuário)
         const { initializeAuthListeners } = await import(`./listeners/authListeners.js${cacheBuster}`);
         const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
@@ -56,12 +72,13 @@ async function main() {
 
 
         // ========================================================
-        // PARTE 2: ESTADO GLOBAL E CONFIGURAÇÕES DA APLICAÇÃO
+        // 2. ESTADO GLOBAL
         // ========================================================
 
         let userCompanyId = null;
         let userCompanyName = null;
         let userBankBalanceConfig = { initialBalance: 0 };
+        let isAdminUser = false; 
 
         let currentDashboardView = 'orders';
         let currentOrdersView = 'pending';
@@ -70,7 +87,6 @@ async function main() {
         
         let orderUpdateDebounce = null;
         let financeUpdateDebounce = null;
-
         let lastFilterValue = 'thisMonth';
 
         const defaultOptions = {
@@ -78,34 +94,30 @@ async function main() {
             materialTypes: ['Malha fria', 'Drifity', 'Cacharrel', 'PP', 'Algodão Fio 30', 'TNT drive', 'Piquê', 'Brim']
         };
 
-
         // ========================================================
-        // PARTE 2.B: FUNÇÃO DE RENDERIZAÇÃO SEGURA (CENTRALIZADA)
+        // 3. RENDERIZAÇÃO SEGURA
         // ========================================================
         
         const safeRenderFinance = (source, transactions, config, pendingValue) => {
-            // v5.22.4 FIX: Remoção da "Trava de Cache" no Main.js.
-            // Se o pendingValue vier como 0 (porque o usuário apagou tudo), 
-            // devemos confiar nele e enviar 0 para a tela.
-            // A responsabilidade visual agora é 100% do financeRenderer.js
-            
-            let finalValue = pendingValue;
-
-            // Se for undefined ou null (erro de cálculo), assumimos 0
-            if (finalValue === undefined || finalValue === null) {
-                finalValue = 0;
-            }
-
+            let finalValue = pendingValue ?? 0;
             UI.renderFinanceDashboard(transactions, config, finalValue);
         };
 
-
         // ========================================================
-        // PARTE 3: LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO
+        // 4. LÓGICA CORE (Inicialização & SaaS Check)
         // ========================================================
         
         const initializeAppLogic = async (user) => {
-            console.log("🚀 [MAIN] Iniciando lógica da aplicação v5.22.4 (True Zero)...");
+            console.log("🚀 [MAIN] Inicializando Sistema...");
+            
+            // A. Definição de Admin
+            const ADMIN_EMAILS = ['admin@paglucro.com', 'saianolucrobr@gmail.com']; 
+            if (ADMIN_EMAILS.includes(user.email)) {
+                isAdminUser = true;
+                console.log("👑 Modo Administrador Ativado");
+            }
+
+            // B. Mapeamento de Usuário
             const userMappingRef = doc(db, "user_mappings", user.uid);
             const userMappingSnap = await getDoc(userMappingRef);
             
@@ -116,46 +128,112 @@ async function main() {
 
                 if (companySnap.exists()) {
                     const companyData = companySnap.data();
+                    
+                    // ============================================================
+                    // 🛡️ SEGURANÇA AVANÇADA SAAS (Bloqueio & Vencimento)
+                    // ============================================================
+
+                    // 1. Exclusão Lógica ou Bloqueio Manual
+                    if (companyData.isDeleted === true || companyData.isBlocked === true) {
+                        if (!isAdminUser) {
+                            console.warn("🚫 Acesso negado: Conta bloqueada ou excluída.");
+                            document.getElementById('blockedModal').classList.remove('hidden');
+                            document.getElementById('blockedLogoutBtn').onclick = handleLogout;
+                            return; // Encerra execução (não carrega dados)
+                        }
+                    }
+
+                    // 2. Verificação de Assinatura (Grace Period)
+                    if (!isAdminUser && !companyData.isLifetime && companyData.dueDate) {
+                        const today = new Date();
+                        today.setHours(0,0,0,0);
+                        
+                        const [y, m, d] = companyData.dueDate.split('-').map(Number);
+                        const dueDate = new Date(y, m - 1, d);
+                        
+                        // Calcula dias de atraso
+                        const diffTime = today - dueDate;
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                        if (diffDays > 5) {
+                            // CASO CRÍTICO: Vencido há mais de 5 dias -> BLOQUEIO
+                            console.warn(`🚫 Plano vencido há ${diffDays} dias.`);
+                            document.getElementById('blockedModal').classList.remove('hidden');
+                            document.getElementById('blockedLogoutBtn').onclick = handleLogout;
+                            return; // Encerra execução
+                        } 
+                        else if (diffDays > 0) {
+                            // CASO ALERTA: Vencido entre 1 e 5 dias -> AVISO (Permite uso)
+                            console.warn(`⚠️ Tolerância: Vencido há ${diffDays} dias.`);
+                            document.getElementById('paymentWarningModal').classList.remove('hidden');
+                        }
+                    }
+
+                    // 3. O Espião (Último Acesso) & Correção de Email
+                    updateDoc(companyRef, { 
+                        lastAccess: serverTimestamp(),
+                        email: user.email 
+                    }).catch(e => console.warn("Erro ao rastrear acesso:", e));
+
+                    // 4. Mensageria Inteligente (Lê e apaga)
+                    if (companyData.adminMessage && companyData.adminMessage.trim() !== "") {
+                        UI.showInfoModal(`🔔 MENSAGEM DO SUPORTE:\n\n${companyData.adminMessage}`);
+                        
+                        // Limpa a mensagem no banco para não repetir
+                        updateDoc(companyRef, { adminMessage: "" })
+                            .catch(e => console.error("Erro ao limpar mensagem lida:", e));
+                    }
+
+                    // ============================================================
+                    // FIM DA LÓGICA DE SEGURANÇA
+                    // ============================================================
+
                     userCompanyName = companyData.companyName || user.email;
                     userBankBalanceConfig = companyData.bankBalanceConfig || { initialBalance: 0 };
                 } else {
                     userCompanyName = user.email; 
                     userBankBalanceConfig = { initialBalance: 0 };
                 }
-                UI.DOM.userEmail.textContent = userCompanyName;
                 
-                if (UI.DOM.periodFilter) {
-                    UI.DOM.periodFilter.value = 'thisMonth';
-                }
+                // Configuração da UI após passar pela segurança
+                UI.DOM.userEmail.textContent = userCompanyName;
+                if (UI.DOM.periodFilter) UI.DOM.periodFilter.value = 'thisMonth';
 
-                // --- INICIALIZAÇÃO REATIVA ---
                 console.log("🔌 [MAIN] Conectando serviços...");
                 initializeOrderService(userCompanyId, handleOrderChange, () => currentOrdersView);
                 initializeFinanceService(userCompanyId, handleFinanceChange, () => userBankBalanceConfig);
                 initializePricingService(userCompanyId, handlePricingChange); 
                 
-                // --- RENDERIZAÇÃO INICIAL ---
                 const now = new Date();
                 const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
                 const pendingRevenue = calculateTotalPendingRevenue ? calculateTotalPendingRevenue(startOfThisMonth, endOfThisMonth) : 0;
                 
+                // Renderização Inicial
                 UI.renderOrders(getAllOrders(), currentOrdersView);
-                
                 safeRenderFinance('Init', getAllTransactions(), userBankBalanceConfig, pendingRevenue);
-                
                 initializeIdleTimer(UI.DOM, handleLogout);
                 initializeAndPopulateDatalists(); 
                 UI.updateNavButton(currentDashboardView);
                 
-                setTimeout(() => {
+                // Exibição do App e Carregamento do Admin
+                setTimeout(async () => {
                     UI.DOM.authContainer.classList.add('hidden'); 
                     UI.DOM.app.classList.remove('hidden');
                     
+                    if (isAdminUser) {
+                        console.log("👑 Carregando módulo Admin v2...");
+                        try {
+                            const { initializeAdminPanel } = await import(`./admin.js${cacheBuster}`);
+                            initializeAdminPanel();
+                        } catch (e) {
+                            console.error("Erro ao carregar painel admin:", e);
+                        }
+                    }
+                    
+                    // Refresh de segurança nos dados financeiros
                     setTimeout(async () => {
                         if (UI.DOM.periodFilter && !UI.DOM.periodFilter.value) UI.DOM.periodFilter.value = 'thisMonth';
-                        
                         if (calculateTotalPendingRevenue) {
                             const dates = getCurrentDashboardDates(); 
                             const freshPending = calculateTotalPendingRevenue(dates.startDate, dates.endDate);
@@ -163,11 +241,7 @@ async function main() {
                         }
                     }, 2000); 
 
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            checkBackupReminder();
-                        });
-                    });
+                    requestAnimationFrame(() => requestAnimationFrame(() => checkBackupReminder()));
                 }, 0);
 
             } else {
@@ -180,6 +254,10 @@ async function main() {
             UI.DOM.app.classList.add('hidden');
             UI.DOM.authContainer.classList.remove('hidden');
             
+            // Garante que os modais de bloqueio sumam ao deslogar
+            document.getElementById('blockedModal').classList.add('hidden');
+            document.getElementById('paymentWarningModal').classList.add('hidden');
+            
             cleanupOrderService();
             cleanupFinanceService();
             cleanupPricingService();
@@ -187,8 +265,10 @@ async function main() {
             userCompanyId = null;
             userCompanyName = null;
             userBankBalanceConfig = { initialBalance: 0 };
+            isAdminUser = false;
         };
 
+        // Ouvinte de Autenticação
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 initializeAppLogic(user);
@@ -199,7 +279,7 @@ async function main() {
 
 
         // ========================================================
-        // PARTE 4: HANDLERS DE MUDANÇA (LÓGICA REATIVA)
+        // 5. HANDLERS E HELPERS
         // ========================================================
 
         const getCurrentDashboardDates = () => {
@@ -209,105 +289,68 @@ async function main() {
 
             if (!UI.DOM.periodFilter) return { startDate: defaultStart, endDate: defaultEnd };
             
-            let filter = UI.DOM.periodFilter.value;
-            if (!filter) filter = 'thisMonth'; 
-
-            if (filter !== lastFilterValue) {
-                lastFilterValue = filter;
-            }
+            let filter = UI.DOM.periodFilter.value || 'thisMonth';
+            if (filter !== lastFilterValue) lastFilterValue = filter;
 
             let startDate = null, endDate = null;
 
             if (filter === 'custom') {
                 if (UI.DOM.startDateInput.value) startDate = new Date(UI.DOM.startDateInput.value + 'T00:00:00');
                 if (UI.DOM.endDateInput.value) endDate = new Date(UI.DOM.endDateInput.value + 'T23:59:59');
-                
-                if (!startDate || !endDate) {
-                    startDate = defaultStart;
-                    endDate = defaultEnd;
-                }
+                if (!startDate || !endDate) { startDate = defaultStart; endDate = defaultEnd; }
             } else {
-                const startOfThisMonth = defaultStart;
-                const endOfThisMonth = defaultEnd;
-                const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-                const startOfThisYear = new Date(now.getFullYear(), 0, 1);
-                const endOfThisYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
-
                 switch(filter) {
-                    case 'thisMonth': startDate = startOfThisMonth; endDate = endOfThisMonth; break;
-                    case 'lastMonth': startDate = startOfLastMonth; endDate = endOfLastMonth; break;
-                    case 'thisYear': startDate = startOfThisYear; endDate = endOfThisYear; break;
+                    case 'thisMonth': startDate = defaultStart; endDate = defaultEnd; break;
+                    case 'lastMonth': 
+                        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+                        break;
+                    case 'thisYear': 
+                        startDate = new Date(now.getFullYear(), 0, 1);
+                        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+                        break;
+                    default: startDate = defaultStart; endDate = defaultEnd;
                 }
             }
-            
-            if (!startDate || !endDate) {
-                startDate = defaultStart;
-                endDate = defaultEnd;
-            }
-
             return { startDate, endDate };
         };
 
         const handleOrderChange = (type, order, viewType) => {
             const isDelivered = order.orderStatus === 'Entregue';
+            const shouldShow = (viewType === 'pending' && !isDelivered) || (viewType === 'delivered' && isDelivered);
 
-            if (viewType === 'pending') {
-                if (isDelivered) {
-                    UI.removeOrderCard(order.id);
-                } else {
-                    switch (type) {
-                        case 'added': UI.addOrderCard(order, viewType); break;
-                        case 'modified': UI.updateOrderCard(order, viewType); break;
-                        case 'removed': UI.removeOrderCard(order.id); break;
-                    }
-                }
-            } 
-            else if (viewType === 'delivered') {
-                if (!isDelivered) {
-                    UI.removeOrderCard(order.id);
-                } else {
-                    switch (type) {
-                        case 'added': UI.addOrderCard(order, viewType); break;
-                        case 'modified': UI.updateOrderCard(order, viewType); break;
-                        case 'removed': UI.removeOrderCard(order.id); break;
-                    }
-                }
+            if (type === 'removed') UI.removeOrderCard(order.id);
+            else if (shouldShow) {
+                if (type === 'added') UI.addOrderCard(order, viewType);
+                else UI.updateOrderCard(order, viewType);
+            } else {
+                UI.removeOrderCard(order.id);
             }
 
             if (calculateTotalPendingRevenue) {
                 if (orderUpdateDebounce) clearTimeout(orderUpdateDebounce);
                 orderUpdateDebounce = setTimeout(() => {
                     const { startDate, endDate } = getCurrentDashboardDates();
-                    // Aqui passamos o valor cru. Se for zero, é zero.
                     const pendingRevenue = calculateTotalPendingRevenue(startDate, endDate);
-                    safeRenderFinance('OrderChange', getAllTransactions ? getAllTransactions() : [], userBankBalanceConfig, pendingRevenue);
+                    safeRenderFinance('OrderChange', getAllTransactions(), userBankBalanceConfig, pendingRevenue);
                 }, 200);
             }
         };
 
         const handleFinanceChange = (type, transaction, config) => {
             const { startDate, endDate } = getCurrentDashboardDates();
-            const transactionDate = new Date(transaction.date + 'T00:00:00');
-            let passesDateFilter = true;
+            const tDate = new Date(transaction.date + 'T00:00:00');
+            const term = UI.DOM.transactionSearchInput.value.toLowerCase();
             
-            if (startDate && endDate) passesDateFilter = transactionDate >= startDate && transactionDate <= endDate;
-            else if(startDate && !endDate) passesDateFilter = transactionDate >= startDate;
-            else if(!startDate && endDate) passesDateFilter = transactionDate <= endDate;
+            const passesDate = (!startDate || tDate >= startDate) && (!endDate || tDate <= endDate);
+            const passesSearch = transaction.description.toLowerCase().includes(term);
 
-            const searchTerm = UI.DOM.transactionSearchInput.value.toLowerCase();
-            const passesSearchFilter = transaction.description.toLowerCase().includes(searchTerm);
-
-            if (!passesDateFilter || !passesSearchFilter) {
-                if (type === 'modified' || type === 'removed') {
-                    UI.removeTransactionRow(transaction.id);
-                }
+            if (!passesDate || !passesSearch) {
+                if (type !== 'added') UI.removeTransactionRow(transaction.id);
             } else {
-                switch (type) {
-                    case 'added': UI.addTransactionRow(transaction); break;
-                    case 'modified': UI.updateTransactionRow(transaction); break;
-                    case 'removed': UI.removeTransactionRow(transaction.id); break;
-                }
+                if (type === 'removed') UI.removeTransactionRow(transaction.id);
+                else if (type === 'added') UI.addTransactionRow(transaction);
+                else UI.updateTransactionRow(transaction);
             }
 
             if (calculateTotalPendingRevenue) {
@@ -315,7 +358,6 @@ async function main() {
                 financeUpdateDebounce = setTimeout(() => {
                     const currentDates = getCurrentDashboardDates();
                     const pendingRevenue = calculateTotalPendingRevenue(currentDates.startDate, currentDates.endDate);
-                    
                     safeRenderFinance('FinanceChange', getAllTransactions(), config, pendingRevenue);
                 }, 250);
             }
@@ -324,11 +366,9 @@ async function main() {
         const handlePricingChange = (type, item) => {
             const isEditMode = !UI.DOM.editPriceTableBtn.classList.contains('hidden');
             const mode = isEditMode ? 'view' : 'edit';
-            switch (type) {
-                case 'added': UI.addPriceTableRow(item, mode); break;
-                case 'modified': UI.updatePriceTableRow(item, mode); break;
-                case 'removed': UI.removePriceTableRow(item.id); break;
-            }
+            if (type === 'removed') UI.removePriceTableRow(item.id);
+            else if (type === 'added') UI.addPriceTableRow(item, mode);
+            else UI.updatePriceTableRow(item, mode);
         };
 
         const getOptionsFromStorage = (type) => {
@@ -346,55 +386,21 @@ async function main() {
             UI.populateDatalists(getOptionsFromStorage('partTypes'), getOptionsFromStorage('materialTypes'));
         };
 
+        // Backup & Restore
         const handleBackup = () => {
             const orders = getAllOrders();
             const transactions = getAllTransactions();
-            if (orders.length === 0 && transactions.length === 0) {
-                UI.showInfoModal("Não há dados para fazer backup.");
-                return;
-            }
-            const backupData = {
-                orders: orders.map(({ id, ...rest }) => rest),
-                transactions: transactions.map(({ id, ...rest }) => rest)
-            };
-            const dataStr = JSON.stringify(backupData, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
+            if (!orders.length && !transactions.length) return UI.showInfoModal("Não há dados para backup.");
+            
+            const dataStr = JSON.stringify({ orders, transactions }, null, 2);
+            const url = URL.createObjectURL(new Blob([dataStr], { type: 'application/json' }));
             const link = document.createElement('a');
-            link.download = `backup-completo-${new Date().toISOString().split('T')[0]}.json`;
+            link.download = `backup-${new Date().toISOString().split('T')[0]}.json`;
             link.href = url;
-            document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link);
             URL.revokeObjectURL(url);
             localStorage.setItem(`lastAutoBackupTimestamp_${userCompanyId}`, Date.now().toString());
-            UI.showInfoModal("Backup completo gerado com sucesso!");
-        };
-
-        const processRestore = async (ordersToRestore, transactionsToRestore) => {
-            const choice = await UI.showConfirmModal("Escolha o modo de importação:", "Adicionar aos existentes", "Substituir tudo");
-            if (choice === null) return;
-            UI.showInfoModal("Restaurando dados... Por favor, aguarde.");
-            if (choice) {
-                const batch = writeBatch(db);
-                ordersToRestore.forEach(order => batch.set(doc(collection(db, `companies/${userCompanyId}/orders`)), order));
-                transactionsToRestore.forEach(t => batch.set(doc(collection(db, `companies/${userCompanyId}/transactions`)), t));
-                await batch.commit();
-                UI.showInfoModal(`${ordersToRestore.length} pedido(s) e ${transactionsToRestore.length} lançamento(s) foram ADICIONADOS.`);
-            } else {
-                const confirmReplace = await UI.showConfirmModal("ATENÇÃO: Isto vai APAGAR TODOS os dados atuais. A ação NÃO PODE SER DESFEITA. Continuar?", "Sim, substituir tudo", "Cancelar");
-                if (confirmReplace) {
-                    const deleteBatch = writeBatch(db);
-                    getAllOrders().forEach(o => deleteBatch.delete(doc(db, `companies/${userCompanyId}/orders`, o.id)));
-                    getAllTransactions().forEach(t => deleteBatch.delete(doc(db, `companies/${userCompanyId}/transactions`, t.id)));
-                    await deleteBatch.commit();
-                    const addBatch = writeBatch(db);
-                    ordersToRestore.forEach(order => addBatch.set(doc(collection(db, `companies/${userCompanyId}/orders`)), order));
-                    transactionsToRestore.forEach(t => addBatch.set(doc(collection(db, `companies/${userCompanyId}/transactions`)), t));
-                    await addBatch.commit();
-                    UI.showInfoModal(`Dados substituídos com sucesso.`);
-                }
-            }
+            UI.showInfoModal("Backup realizado com sucesso!");
         };
 
         const handleRestore = (event) => {
@@ -404,56 +410,46 @@ async function main() {
             reader.onload = async (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    if (typeof data !== 'object' || data === null || (!data.orders && !data.transactions)) {
-                        UI.showInfoModal("Arquivo de backup inválido ou em formato incorreto.");
-                        return;
+                    if (!data || (!data.orders && !data.transactions)) throw new Error("Formato inválido");
+                    
+                    const choice = await UI.showConfirmModal("Importar Backup:", "Adicionar aos existentes", "Substituir tudo");
+                    if (choice === null) return;
+                    
+                    UI.showInfoModal("Processando restauração...");
+                    const batch = writeBatch(db);
+                    const ordersRef = collection(db, `companies/${userCompanyId}/orders`);
+                    const transRef = collection(db, `companies/${userCompanyId}/transactions`);
+
+                    if (!choice) { // Substituir tudo
+                        getAllOrders().forEach(o => batch.delete(doc(ordersRef, o.id)));
+                        getAllTransactions().forEach(t => batch.delete(doc(transRef, t.id)));
                     }
-                    await processRestore(data.orders || [], data.transactions || []);
+
+                    (data.orders || []).forEach(o => batch.set(doc(ordersRef), o));
+                    (data.transactions || []).forEach(t => batch.set(doc(transRef), t));
+                    
+                    await batch.commit();
+                    UI.showInfoModal("Dados restaurados com sucesso!");
                 } catch (error) {
-                    console.error("Erro ao processar backup:", error);
-                    UI.showInfoModal("Arquivo de backup inválido ou corrompido.");
+                    console.error(error);
+                    UI.showInfoModal("Erro ao processar arquivo de backup.");
                 }
             };
             reader.readText(file);
             event.target.value = '';
         };
 
-        const triggerAutoBackupIfNeeded = () => {
-            const key = `lastAutoBackupTimestamp_${userCompanyId}`;
-            const lastBackup = localStorage.getItem(key);
-            if (!lastBackup) return;
-            const sevenDaysInMillis = 7 * 24 * 60 * 60 * 1000;
-            if ((Date.now() - parseInt(lastBackup)) > sevenDaysInMillis) {
-                UI.showInfoModal("Backup semi-automático iniciado. Seu último backup foi há mais de 7 dias.");
-                handleBackup();
-            }
-        };
-
         const checkBackupReminder = () => {
-            const key = `lastAutoBackupTimestamp_${userCompanyId}`;
-            const lastBackup = localStorage.getItem(key);
-            const sevenDaysInMillis = 7 * 24 * 60 * 60 * 1000;
-            let needsReminder = false;
-            
-            if (!lastBackup) {
-                needsReminder = true;
-            } else {
-                if ((Date.now() - parseInt(lastBackup)) > sevenDaysInMillis) {
-                    needsReminder = true;
-                }
-            }
-
-            if (needsReminder) {
-                const banner = UI.DOM.backupReminderBanner;
-                banner.classList.remove('hidden');
-                banner.classList.remove('toast-enter');
-                void banner.offsetWidth;
-                banner.classList.add('toast-enter');
+            const last = localStorage.getItem(`lastAutoBackupTimestamp_${userCompanyId}`);
+            if (!last || (Date.now() - parseInt(last)) > (7 * 24 * 60 * 60 * 1000)) {
+                UI.DOM.backupReminderBanner.classList.remove('hidden', 'toast-enter');
+                void UI.DOM.backupReminderBanner.offsetWidth;
+                UI.DOM.backupReminderBanner.classList.add('toast-enter');
             }
         };
 
+        // Inicialização dos Listeners
         initializeAuthListeners(UI);
-
         initializeNavigationListeners(UI, {
             handleBackup,
             handleRestore,
@@ -462,12 +458,8 @@ async function main() {
             getConfig: () => userBankBalanceConfig,
             getState: () => ({ currentDashboardView, currentOrdersView }),
             setState: (newState) => {
-                if (newState.currentDashboardView !== undefined) {
-                    currentDashboardView = newState.currentDashboardView;
-                }
-                if (newState.currentOrdersView !== undefined) {
-                    currentOrdersView = newState.currentOrdersView;
-                }
+                if (newState.currentDashboardView) currentDashboardView = newState.currentDashboardView;
+                if (newState.currentOrdersView) currentOrdersView = newState.currentOrdersView;
             }
         });
 
@@ -475,82 +467,42 @@ async function main() {
             getState: () => ({ partCounter }),
             setState: (newState) => {
                 if (newState.partCounter !== undefined) partCounter = newState.partCounter;
-                if (newState.currentOptionType !== undefined) currentOptionType = newState.currentOptionType;
+                if (newState.currentOptionType) currentOptionType = newState.currentOptionType;
             },
             getOptionsFromStorage,
             services: {
-                saveOrder,
-                getOrderById,
-                getAllOrders,
-                deleteOrder,
-                saveTransaction,
-                deleteTransaction,
-                getTransactionByOrderId,        
-                getTransactionsByOrderId,       
-                deleteAllTransactionsByOrderId
+                saveOrder, getOrderById, getAllOrders, deleteOrder,
+                saveTransaction, deleteTransaction, getTransactionByOrderId,        
+                getTransactionsByOrderId, deleteAllTransactionsByOrderId
             },
             userCompanyName: () => userCompanyName 
         });
 
-        // ==================================================================
-        // PROXY DE UI (Mantido para Compatibilidade)
-        // ==================================================================
         const FinanceUIProxy = Object.create(UI);
-        FinanceUIProxy.renderFinanceDashboard = (transactions, config, pendingReceived) => {
+        FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
             const { startDate, endDate } = getCurrentDashboardDates();
-            const authoritativePending = calculateTotalPendingRevenue(startDate, endDate);
-            
-            // Aqui também removemos a lógica que preferia o cache.
-            // Se calculateTotalPendingRevenue retornar 0, é 0.
-            let finalPending = authoritativePending;
-            if (finalPending === undefined) finalPending = 0;
-
-            safeRenderFinance('ListenerProxy', transactions, config, finalPending);
+            safeRenderFinance('ListenerProxy', transactions, config, calculateTotalPendingRevenue(startDate, endDate));
         };
 
         initializeFinanceListeners(FinanceUIProxy, { 
             services: {
-                saveTransaction,
-                deleteTransaction,
-                markTransactionAsPaid,
-                getAllTransactions,
-                saveInitialBalance,
-                getTransactionById,              
-                calculateTotalPendingRevenue,    
-                updateOrderDiscountFromFinance   
+                saveTransaction, deleteTransaction, markTransactionAsPaid,
+                getAllTransactions, saveInitialBalance, getTransactionById,              
+                calculateTotalPendingRevenue, updateOrderDiscountFromFinance   
             },
             getConfig: () => userBankBalanceConfig,
-            setConfig: (newState) => {
-                if (newState.initialBalance !== undefined) {
-                    userBankBalanceConfig.initialBalance = newState.initialBalance;
-                }
-            }
+            setConfig: (s) => { if (s.initialBalance !== undefined) userBankBalanceConfig.initialBalance = s.initialBalance; }
         });
 
         initializeModalAndPricingListeners(UI, {
-            services: {
-                getAllPricingItems,
-                savePriceTableChanges, 
-                deletePriceItem
-            },
-            helpers: {
-                getOptionsFromStorage,
-                saveOptionsToStorage
-            },
+            services: { getAllPricingItems, savePriceTableChanges, deletePriceItem },
+            helpers: { getOptionsFromStorage, saveOptionsToStorage },
             getState: () => ({ currentOptionType })
         });
 
     } catch (error) {
-        console.error("Falha crítica ao inicializar o PagLucro Gestor:", error);
-        document.body.innerHTML = `
-            <div style="padding: 20px; text-align: center; font-family: sans-serif;">
-                <h1 style="color: #D90000;">Erro Crítico de Inicialização</h1>
-                <p>Não foi possível carregar os componentes da aplicação.</p>
-                <p>Isso pode ser um problema de conexão ou um cache corrompido.</p>
-                <p>Por favor, tente <strong>limpar o cache do seu navegador (Ctrl+Shift+R ou Cmd+Shift+R)</strong> e recarregar a página.</p>
-                <p style="margin-top: 20px; font-size: 0.8em; color: #666;">Detalhe do erro: ${error.message}</p>
-            </div>
-        `;
+        console.error("Critical Init Error:", error);
+        document.body.innerHTML = `<div style="text-align:center;padding:50px;color:red"><h1>Erro de Inicialização</h1><p>Por favor, limpe o cache do navegador.</p><small>${error.message}</small></div>`;
     }
 }
 main();
