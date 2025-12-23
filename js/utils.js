@@ -1,15 +1,11 @@
 // js/utils.js
 // =========================================================================
-// v5.24.0 - SHARE API SUPPORT & PDF REFACTORING
+// v5.26.0 - WHATSAPP TURBO FLOW (PC/MOBILE HYBRID)
 // =========================================================================
-// 1. Importa a classe jsPDF
 import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
-// 2. Importa o objeto 'autoTable' (que é o export default) do plugin
 import autoTable from "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm";
 
-// 3. APLICA O PATCH MANUALMENTE
 autoTable.applyPlugin(jsPDF);
-// =========================================================================
 
 // --- Constantes Utilitárias ---
 const IMGBB_API_KEY = "f012978df48f3596b193c06e05589442";
@@ -124,10 +120,8 @@ export const initializeIdleTimer = (dom, logoutHandler) => {
 };
 
 
-// --- Funções de Geração de PDF (Refatoradas para Compartilhamento) ---
+// --- Funções de Geração de PDF ---
 
-// Função Privada: Apenas CRIA o documento na memória, não salva.
-// Isso permite reusar a lógica tanto para Download quanto para Compartilhar.
 const _createPdfDocument = async (order, userCompanyName) => {
     const doc = new jsPDF('p', 'mm', 'a4'); 
         
@@ -337,7 +331,7 @@ const _createPdfDocument = async (order, userCompanyName) => {
     };
 };
 
-// 1. GERAÇÃO E DOWNLOAD (Comportamento Antigo)
+// 1. GERAÇÃO E DOWNLOAD (Apenas salva)
 export const generateComprehensivePdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
     showInfoModal("Iniciando geração do PDF...");
     const order = allOrders.find(o => o.id === orderId);
@@ -357,15 +351,15 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
     }
 };
 
-// 2. COMPARTILHAMENTO NATIVO (Novo Comportamento)
+// =========================================================================
+// 2. COMPARTILHAMENTO TURBO (Celular = Share / PC = Download + WhatsApp)
+// =========================================================================
 export const shareOrderPdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
-    // Verificação de suporte do navegador
-    if (!navigator.share) {
-        showInfoModal("Seu dispositivo ou navegador não suporta compartilhamento direto.");
-        return;
-    }
+    // Detecta se é dispositivo móvel (Android/iOS)
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-    showInfoModal("Preparando arquivo para compartilhar...");
+    showInfoModal(isMobile ? "Abrindo opções de compartilhar..." : "Preparando PDF para WhatsApp...");
+    
     const order = allOrders.find(o => o.id === orderId);
     if (!order) {
         showInfoModal("Erro: Pedido não encontrado.");
@@ -373,30 +367,50 @@ export const shareOrderPdf = async (orderId, allOrders, userCompanyName, showInf
     }
 
     try {
-        // Gera o PDF na memória
         const { doc, filename } = await _createPdfDocument(order, userCompanyName);
         
-        // Converte o PDF para um objeto File (Arquivo Virtual)
-        const pdfBlob = doc.output('blob');
-        const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+        if (isMobile && navigator.share) {
+            // --- MODO CELULAR (Nativo) ---
+            const pdfBlob = doc.output('blob');
+            const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
 
-        // Verifica se o navegador permite compartilhar arquivos
-        if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-            await navigator.share({
-                files: [pdfFile],
-                title: filename,
-                text: `Segue em anexo o pedido de ${order.clientName}`
-            });
-            // Sucesso silencioso (o usuário já vê a gaveta de apps)
+            if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                await navigator.share({
+                    files: [pdfFile],
+                    title: filename,
+                    text: `Segue em anexo o pedido de ${order.clientName}`
+                });
+            } else {
+                 doc.save(filename);
+                 showInfoModal("Arquivo baixado. Seu navegador móvel não suporta envio direto.");
+            }
         } else {
-            showInfoModal("O navegador bloqueou o compartilhamento deste tipo de arquivo.");
+            // --- MODO COMPUTADOR (Turbo WhatsApp) ---
+            
+            // 1. Baixar o Arquivo automaticamente
+            doc.save(filename);
+            
+            // 2. Preparar Link do WhatsApp
+            let phone = order.clientPhone ? order.clientPhone.replace(/\D/g, '') : '';
+            if (phone.length > 0 && phone.length <= 11) phone = '55' + phone; 
+            
+            const message = `Olá, aqui está o PDF do pedido (${filename}).`;
+            const whatsappUrl = phone 
+                ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+                : `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+            // 3. Abrir WhatsApp em nova aba (com leve delay para garantir que o download iniciou)
+            setTimeout(() => {
+                window.open(whatsappUrl, '_blank');
+                // Alerta explicativo
+                showInfoModal("PDF Baixado! Agora basta ARRASTAR o arquivo para a conversa do WhatsApp.");
+            }, 800);
         }
 
     } catch (error) {
-        // Ignora erro se o usuário cancelou a gaveta de compartilhamento
         if (error.name !== 'AbortError') {
-            console.error("Erro ao compartilhar PDF:", error);
-            showInfoModal("Erro ao tentar compartilhar o arquivo.");
+            console.error("Erro ao compartilhar:", error);
+            showInfoModal("Erro ao processar o compartilhamento.");
         }
     }
 };
