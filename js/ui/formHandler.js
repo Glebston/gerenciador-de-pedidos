@@ -1,7 +1,8 @@
+// js/ui/formHandler.js
 // ==========================================================
-// MÓDULO FORM HANDLER (v5.0.0 - Multi-Payments Support)
+// MÓDULO FORM HANDLER (v5.8.0 - Reorder Support)
 // Responsabilidade: Gerenciar toda a lógica interna do
-// modal de Pedidos, incluindo lista dinâmica de pagamentos.
+// modal de Pedidos, incluindo lista dinâmica e Reordenamento.
 // ==========================================================
 
 import { DOM } from './dom.js';
@@ -281,19 +282,74 @@ const addContentToPart = (partItem, partData = {}) => {
         const listContainer = detalhadoTpl.querySelector('.detailed-items-list');
         const gridContainer = detalhadoTpl.querySelector('.detailed-sizes-grid-container');
         
+        // --- INÍCIO DA LÓGICA DE REORDENAMENTO (DRAG AND DROP) ---
+        // Apenas o container precisa ouvir o 'dragover' para calcular a posição
+        listContainer.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Permite o drop
+            const afterElement = getDragAfterElement(listContainer, e.clientY);
+            const draggable = document.querySelector('.dragging');
+            if (draggable) {
+                if (afterElement == null) {
+                    listContainer.appendChild(draggable);
+                } else {
+                    listContainer.insertBefore(draggable, afterElement);
+                }
+            }
+        });
+
+        // Função auxiliar para determinar a posição do drop
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.detailed-item-row:not(.dragging)')];
+
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+        // --- FIM DA LÓGICA DE REORDENAMENTO ---
+
         const addRow = (detail = {}, prefilledSize = null) => {
             const row = document.createElement('div');
-            row.className = 'grid grid-cols-12 gap-2 items-center detailed-item-row';
+            // Alterado de grid-cols-12 para incluir a alça
+            row.className = 'grid grid-cols-12 gap-2 items-center detailed-item-row transition-all duration-200 bg-white border border-transparent rounded hover:border-gray-200';
             
             const sizeValue = prefilledSize || detail.size || '';
             const isReadonly = prefilledSize ? 'readonly' : '';
 
+            // Layout atualizado: 
+            // 1 col (Alça) | 4 cols (Nome) | 4 cols (Tamanho) | 2 cols (Num) | 1 col (Remove)
             row.innerHTML = `
-                <div class="col-span-5"><input type="text" placeholder="Nome na Peça" class="p-1 border rounded-md w-full text-sm item-det-name" value="${detail.name || ''}"></div>
+                <div class="col-span-1 flex justify-center cursor-move drag-handle text-gray-300 hover:text-gray-500" title="Arraste para mover">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                </div>
+                <div class="col-span-4"><input type="text" placeholder="Nome na Peça" class="p-1 border rounded-md w-full text-sm item-det-name" value="${detail.name || ''}"></div>
                 <div class="col-span-4"><input type="text" placeholder="Tamanho" class="p-1 border rounded-md w-full text-sm item-det-size" value="${sizeValue}" ${isReadonly}></div>
                 <div class="col-span-2"><input type="text" placeholder="Nº" class="p-1 border rounded-md w-full text-sm item-det-number" value="${detail.number || ''}"></div>
                 <div class="col-span-1 flex justify-center"><button type="button" class="remove-detailed-row text-red-500 font-bold hover:text-red-700">&times;</button></div>`;
             
+            // Listeners para Drag and Drop
+            const handle = row.querySelector('.drag-handle');
+            
+            // Só permite arrastar se estiver segurando a alça (evita problemas ao selecionar texto)
+            handle.addEventListener('mouseenter', () => { row.setAttribute('draggable', 'true'); });
+            handle.addEventListener('mouseleave', () => { row.setAttribute('draggable', 'false'); });
+            // Fallback para toque em mobile
+            handle.addEventListener('touchstart', () => { row.setAttribute('draggable', 'true'); }, {passive: true});
+
+            row.addEventListener('dragstart', () => {
+                row.classList.add('dragging', 'opacity-50', 'bg-blue-50');
+            });
+
+            row.addEventListener('dragend', () => {
+                row.classList.remove('dragging', 'opacity-50', 'bg-blue-50');
+                row.removeAttribute('draggable'); // Reseta por segurança
+            });
+
             row.querySelector('.remove-detailed-row').addEventListener('click', () => {
                 row.remove();
                 renderFinancialSection();
