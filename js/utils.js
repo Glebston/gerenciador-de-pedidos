@@ -1,7 +1,15 @@
 // js/utils.js
 // =========================================================================
-// v5.26.0 - WHATSAPP TURBO FLOW (PC/MOBILE HYBRID)
+// v5.27.0 - PRODUCTION OS SUPPORT (BLIND PDF)
 // =========================================================================
+import { 
+    getFirestore, 
+    collectionGroup, 
+    getDocs, 
+    updateDoc 
+} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+import { db } from './firebaseConfig.js';
 import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
 import autoTable from "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm";
 
@@ -120,7 +128,7 @@ export const initializeIdleTimer = (dom, logoutHandler) => {
 };
 
 
-// --- Funções de Geração de PDF ---
+// --- Funções de Geração de PDF (COMERCIAL) ---
 
 const _createPdfDocument = async (order, userCompanyName) => {
     const doc = new jsPDF('p', 'mm', 'a4'); 
@@ -331,6 +339,208 @@ const _createPdfDocument = async (order, userCompanyName) => {
     };
 };
 
+// --- Funções de Geração de PDF (OS DE PRODUÇÃO / CEGA) ---
+
+const _createProductionPdfDocument = async (order, userCompanyName) => {
+    // Layout: "Cego" (Sem valores), Foco em quantidades e detalhes técnicos
+    const doc = new jsPDF('p', 'mm', 'a4'); 
+        
+    const A4_WIDTH = 210;
+    const MARGIN = 15;
+    const contentWidth = A4_WIDTH - MARGIN * 2;
+    let yPosition = MARGIN;
+
+    // --- CABEÇALHO ---
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ORDEM DE PRODUÇÃO', A4_WIDTH / 2, yPosition, { align: 'center' });
+    yPosition += 8;
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(userCompanyName || 'Fábrica', A4_WIDTH / 2, yPosition, { align: 'center' });
+    yPosition += 12;
+
+    // --- DADOS PRINCIPAIS ---
+    // Cliente + DATA DE ENTREGA (Em destaque)
+    doc.setDrawColor(0);
+    doc.setFillColor(245, 245, 245);
+    doc.rect(MARGIN, yPosition, contentWidth, 25, 'F');
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`CLIENTE: ${order.clientName}`, MARGIN + 2, yPosition + 7);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tel: ${order.clientPhone || 'N/A'}`, MARGIN + 2, yPosition + 14);
+    doc.text(`Data do Pedido: ${order.orderDate ? new Date(order.orderDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}`, MARGIN + 2, yPosition + 21);
+
+    // Destaque da Entrega (Lado Direito)
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('DATA DE ENTREGA:', A4_WIDTH - MARGIN - 2, yPosition + 7, { align: 'right' });
+    
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(200, 0, 0); // Vermelho escuro para atenção
+    const deliveryText = order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString('pt-br') : 'A DEFINIR';
+    doc.text(deliveryText, A4_WIDTH - MARGIN - 2, yPosition + 15, { align: 'right' });
+    doc.setTextColor(0); // Reset cor
+
+    yPosition += 30;
+
+    // --- TABELA DE PRODUÇÃO (SEM VALORES) ---
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Itens para Produção', MARGIN, yPosition);
+    yPosition += 6;
+
+    const tableHead = [['Peça / Detalhes (Grade)', 'Material', 'Cor', 'QTD TOTAL']];
+    const tableBody = [];
+
+    (order.parts || []).forEach(p => {
+        const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
+        const specificQty = (p.specifics || []).length;
+        const detailedQty = (p.details || []).length;
+        const totalQty = standardQty + specificQty + detailedQty;
+
+        let detailsText = '';
+        if (p.partInputType === 'comum') {
+            if (p.sizes && Object.keys(p.sizes).length > 0) {
+                // Formatação para facilitar leitura (Grade em linhas separadas)
+                detailsText += Object.entries(p.sizes).map(([cat, sizes]) =>
+                    `${cat}: ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
+                ).join('\n');
+            }
+            if (p.specifics && p.specifics.length > 0) {
+                detailsText += (detailsText ? '\n' : '') + 'ESPECÍFICOS:\n' + p.specifics.map(s => 
+                    `- ${s.width}x${s.height} (${s.observation||'Sem obs.'})`
+                ).join('\n');
+            }
+        } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
+            // Lista de Nomes e Números
+            detailsText = p.details.map(d => `• ${d.name||'--'} (${d.size||'--'}) Nº ${d.number||'--'}`).join('\n');
+        }
+
+        tableBody.push([
+            { content: `${p.type}\n${detailsText}`, styles: { fontSize: 10 } }, // Fonte maior
+            p.material,
+            p.colorMain,
+            { content: totalQty.toString(), styles: { halign: 'center', fontStyle: 'bold', fontSize: 12 } }
+        ]);
+    });
+
+    doc.autoTable({
+        head: tableHead,
+        body: tableBody,
+        startY: yPosition,
+        theme: 'grid',
+        headStyles: { fillColor: [80, 80, 80], textColor: 255, fontStyle: 'bold', fontSize: 11 },
+        columnStyles: {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 30 },
+            3: { cellWidth: 20, halign: 'center' }
+        },
+        styles: { cellPadding: 2, fontSize: 10, valign: 'middle' },
+        didDrawPage: (data) => { yPosition = data.cursor.y; }
+    });
+    yPosition = doc.lastAutoTable.finalY + 8;
+
+    // --- OBSERVAÇÕES TÉCNICAS ---
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Observações / Instruções', MARGIN, yPosition);
+    yPosition += 5;
+    
+    doc.setDrawColor(150);
+    doc.rect(MARGIN, yPosition, contentWidth, 20); // Caixa para Obs
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const obsLines = doc.splitTextToSize(order.generalObservation || 'Sem observações adicionais.', contentWidth - 4);
+    doc.text(obsLines, MARGIN + 2, yPosition + 5);
+    yPosition += 25;
+
+    // --- CHECKLIST DE PROCESSO (Rodapé de Controle) ---
+    // [ ] Corte  [ ] Estampa  [ ] Costura  [ ] Revisão
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Controle de Etapas:', MARGIN, yPosition);
+    yPosition += 6;
+
+    const stages = ['Corte', 'Estampa/Bordado', 'Costura', 'Revisão', 'Embalagem'];
+    let xStage = MARGIN;
+    const boxSize = 5;
+    
+    stages.forEach(stage => {
+        doc.rect(xStage, yPosition - 4, boxSize, boxSize); // Checkbox
+        doc.text(stage, xStage + 7, yPosition);
+        xStage += 40; // Espaçamento
+    });
+    yPosition += 10;
+
+    // --- MOCKUPS (Foco Visual) ---
+    if (order.mockupUrls && order.mockupUrls.length > 0) {
+        yPosition += 10;
+        if (yPosition > 200) { 
+            doc.addPage();
+            yPosition = MARGIN;
+        }
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('ANEXOS VISUAIS (MOCKUPS)', MARGIN, yPosition);
+        yPosition += 10;
+        
+        for (const url of order.mockupUrls) {
+            try {
+                const imgData = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = 'Anonymous';
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        resolve(canvas.toDataURL('image/jpeg', 0.9));
+                    };
+                    img.onerror = (err) => reject(new Error(`Falha img: ${url}`));
+                    img.src = url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`;
+                });
+
+                const imgProps = doc.getImageProperties(imgData);
+                // Tenta usar largura total, mas limita altura para caber na página se possível
+                let imgWidth = contentWidth;
+                let imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+                
+                // Se for muito alta, ajusta
+                if (imgHeight > 200) {
+                    imgHeight = 200;
+                    imgWidth = (imgProps.width * imgHeight) / imgProps.height;
+                }
+
+                if (yPosition + imgHeight > 280) { 
+                    doc.addPage();
+                    yPosition = MARGIN;
+                }
+                
+                doc.addImage(imgData, 'JPEG', MARGIN, yPosition, imgWidth, imgHeight);
+                yPosition += imgHeight + 10;
+
+            } catch (imgError) {
+                console.error("Erro imagem PDF Prod:", imgError);
+            }
+        }
+    }
+
+    return { 
+        doc, 
+        filename: `OS_Producao_${order.clientName.replace(/\s/g, '_')}.pdf`
+    };
+};
+
 // 1. GERAÇÃO E DOWNLOAD (Apenas salva)
 export const generateComprehensivePdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
     showInfoModal("Iniciando geração do PDF...");
@@ -348,6 +558,26 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
     } catch (error) {
         console.error("Erro ao gerar PDF programático:", error);
         showInfoModal("Ocorreu um erro inesperado ao gerar o PDF.");
+    }
+};
+
+// NOVO: Geração da OS de Produção
+export const generateProductionOrderPdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
+    showInfoModal("Gerando OS de Produção...");
+    const order = allOrders.find(o => o.id === orderId);
+    if (!order) {
+        showInfoModal("Erro: Pedido não encontrado.");
+        return;
+    }
+
+    try {
+        const { doc, filename } = await _createProductionPdfDocument(order, userCompanyName);
+        doc.save(filename);
+        showInfoModal("Ordem de Serviço gerada!");
+
+    } catch (error) {
+        console.error("Erro ao gerar OS:", error);
+        showInfoModal("Erro ao gerar a Ordem de Serviço.");
     }
 };
 
@@ -548,5 +778,47 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
     } catch (error) {
         console.error("Erro ao gerar PDF do Recibo:", error);
         showInfoModal("Não foi possível gerar o PDF do recibo. Ocorreu um erro interno.");
+    }
+};
+// --- FERRAMENTA DE MIGRAÇÃO (USO ÚNICO) ---
+export const runDatabaseMigration = async (showInfoModal) => {
+    const confirm = window.confirm("ATENÇÃO: Isso vai verificar todos os pedidos do sistema e adicionar o campo ID interno neles. Deseja continuar?");
+    if (!confirm) return;
+
+    showInfoModal("Iniciando reparo do banco de dados... Por favor aguarde.");
+    console.log("--- INICIANDO MIGRAÇÃO ---");
+
+    try {
+        // Busca TODOS os pedidos de todas as empresas
+        const q = collectionGroup(db, 'orders');
+        const snapshot = await getDocs(q);
+        
+        let updatedCount = 0;
+        let batchPromises = [];
+
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            // Verifica se falta o campo 'id' ou se ele está vazio
+            if (!data.id) {
+                console.log(`Corrigindo pedido: ${docSnap.id}`);
+                // Atualiza apenas o campo ID com o código do documento
+                const updatePromise = updateDoc(docSnap.ref, { id: docSnap.id })
+                    .then(() => console.log(`-> Sucesso: ${docSnap.id}`))
+                    .catch(e => console.error(`-> Erro: ${docSnap.id}`, e));
+                
+                batchPromises.push(updatePromise);
+                updatedCount++;
+            }
+        });
+
+        await Promise.all(batchPromises);
+        
+        const msg = `Migração concluída! ${updatedCount} pedidos foram corrigidos.`;
+        console.log(msg);
+        showInfoModal(msg);
+
+    } catch (error) {
+        console.error("Erro fatal na migração:", error);
+        showInfoModal("Erro ao rodar migração. Veja o console (F12).");
     }
 };
