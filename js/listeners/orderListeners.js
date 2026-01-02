@@ -1,10 +1,9 @@
 // js/listeners/orderListeners.js
 // ==========================================================
-// MÓDULO ORDER LISTENERS (v5.25.2 - WHATSAPP LINK FIX)
-// Responsabilidade: Capturar eventos e conectar UI <-> Services
+// MÓDULO ORDER LISTENERS (v5.31.0 - STABLE & PRECISE)
 // ==========================================================
 
-import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf, shareOrderPdf } from '../utils.js';
+import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf, generateProductionOrderPdf, runDatabaseMigration } from '../utils.js';
 
 /**
  * Coleta os dados do formulário do pedido.
@@ -33,6 +32,7 @@ function collectFormData(UI) {
         paymentFinStatus: 'pago'
     };
     
+    // Coleta Peças
     UI.DOM.partsContainer.querySelectorAll('.part-item').forEach(p => {
         const id = p.dataset.partId;
         const part = { type: p.querySelector('.part-type').value, material: p.querySelector('.part-material').value, colorMain: p.querySelector('.part-color-main').value, partInputType: p.dataset.partType, sizes: {}, details: [], specifics: [], unitPriceStandard: 0, unitPriceSpecific: 0, unitPrice: 0 };
@@ -57,28 +57,59 @@ export function initializeOrderListeners(UI, deps) {
 
     const { getState, setState, getOptionsFromStorage, services, userCompanyName } = deps;
 
+    // --- GATILHO SECRETO DE MIGRAÇÃO (SHIFT + Clique no Título) ---
+    if (UI.DOM.modalTitle) {
+        UI.DOM.modalTitle.addEventListener('click', (e) => {
+            if (e.shiftKey) {
+                runDatabaseMigration(UI.showInfoModal);
+            }
+        });
+    }
+
+    // Abertura do Modal de Novo Pedido
     UI.DOM.addOrderBtn.addEventListener('click', () => { 
         setState({ partCounter: 0 }); 
         UI.resetForm(); 
         UI.showOrderModal(); 
     });
 
+    // --- SALVAR PEDIDO (Estável e Preciso) ---
     UI.DOM.orderForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         UI.DOM.saveBtn.disabled = true; 
         UI.DOM.uploadIndicator.classList.remove('hidden');
         
         try {
+            // 1. Upload de Imagens
             const files = UI.DOM.mockupFiles.files;
             const uploadPromises = Array.from(files).map(file => fileToBase64(file).then(uploadToImgBB));
             const newUrls = (await Promise.all(uploadPromises)).filter(Boolean);
             
+            // 2. Coleta de Dados
             const orderData = collectFormData(UI); 
             orderData.mockupUrls.push(...newUrls);
             
-            const orderId = UI.DOM.orderId.value;
+            // Tratamento IMPORTANTE do ID: Remove espaços em branco que causam erro "No document to update"
+            let orderId = UI.DOM.orderId.value ? UI.DOM.orderId.value.trim() : '';
+            
+            // Garante que o ID esteja escrito DENTRO do objeto do pedido (Crucial para o Link de Aprovação funcionar)
+            if (orderId) {
+                orderData.id = orderId;
+            }
+
+            // 3. Salvar no Banco
+            // Se orderId existir, atualiza. Se não, cria novo.
+            // Removemos a lógica de "Try/Catch para criar novo" para evitar duplicação acidental.
             const savedOrderId = await services.saveOrder(orderData, orderId); 
             
+            // Se for um pedido NOVO, o services retorna o novo ID gerado. 
+            // Precisamos garantir que esse ID novo também seja gravado dentro do documento para o Link funcionar.
+            if (!orderId && savedOrderId) {
+                // Pequeno update silencioso para gravar o ID dentro do documento recém-criado
+                await services.saveOrder({ id: savedOrderId }, savedOrderId);
+            }
+            
+            // 4. Atualizar Finanças
             const clientName = orderData.clientName;
             const existingTransactions = services.getTransactionsByOrderId ? services.getTransactionsByOrderId(savedOrderId) : [];
             const newPaymentList = UI.getPaymentList ? UI.getPaymentList() : [];
@@ -106,6 +137,7 @@ export function initializeOrderListeners(UI, deps) {
 
             UI.hideOrderModal();
             
+            // 5. Pós-Salvar (Recibos)
             if (orderData.orderStatus === 'Finalizado' || orderData.orderStatus === 'Entregue') {
                 const generate = await UI.showConfirmModal(
                     "Pedido salvo com sucesso! Deseja gerar o Recibo de Quitação e Entrega?", 
@@ -114,7 +146,7 @@ export function initializeOrderListeners(UI, deps) {
                 );
                 if (generate) {
                     const fullOrderData = { ...orderData, id: savedOrderId };
-                    await generateReceiptPdf(fullOrderData, userCompanyName, UI.showInfoModal);
+                    await generateReceiptPdf(fullOrderData, userCompanyName(), UI.showInfoModal);
                 }
             } else {
                  UI.showInfoModal("Pedido salvo com sucesso!");
@@ -122,22 +154,27 @@ export function initializeOrderListeners(UI, deps) {
 
         } catch (error) { 
             console.error("Erro ao salvar pedido:", error);
-            UI.showInfoModal('Ocorreu um erro ao salvar o pedido. Por favor, verifique os dados e tente novamente.'); 
+            // Se der erro agora, é um erro real de conexão ou permissão, não vamos mascarar duplicando o pedido.
+            UI.showInfoModal(`Erro ao salvar: ${error.message || 'Verifique o console'}`); 
         } finally { 
             UI.DOM.saveBtn.disabled = false; 
             UI.DOM.uploadIndicator.classList.add('hidden'); 
         }
     });
 
+    // --- LISTENERS DA GRID ---
     UI.DOM.ordersList.addEventListener('click', async (e) => {
         const btn = e.target.closest('button');
-        if (!btn || !btn.dataset.id) return;
+        if (!btn) return;
+        // Se clicar no botão de fechar (caso ele estivesse aqui por engano)
+        if (btn.id === 'closeViewBtn') return; 
 
         const id = btn.dataset.id;
-        const order = services.getOrderById(id);
-        if (!order) return;
+        if (!id && !btn.id.includes('Pdf')) return;
 
-        if (btn.classList.contains('edit-btn')) {
+        const order = id ? services.getOrderById(id) : null;
+
+        if (btn.classList.contains('edit-btn') && order) {
             let { partCounter } = getState();
             partCounter = 0;
             const transactions = services.getTransactionsByOrderId ? services.getTransactionsByOrderId(id) : [];
@@ -149,7 +186,7 @@ export function initializeOrderListeners(UI, deps) {
             setState({ partCounter });
             UI.showOrderModal();
             
-        } else if (btn.classList.contains('replicate-btn')) {
+        } else if (btn.classList.contains('replicate-btn') && order) {
             let { partCounter } = getState();
             partCounter = 0;
             partCounter = UI.populateFormForEdit(order, partCounter);
@@ -177,11 +214,11 @@ export function initializeOrderListeners(UI, deps) {
                       }
                   }
               });
-        } else if (btn.classList.contains('view-btn')) {
+        } else if (btn.classList.contains('view-btn') && order) {
             UI.viewOrder(order);
             UI.showViewModal();
             
-        } else if (btn.classList.contains('settle-and-deliver-btn')) {
+        } else if (btn.classList.contains('settle-and-deliver-btn') && order) {
             try {
                 let totalValue = 0;
                 (order.parts || []).forEach(p => {
@@ -198,7 +235,7 @@ export function initializeOrderListeners(UI, deps) {
                 const adiantamentoExistente = order.downPayment || 0;
                 const valorRestante = totalValue - adiantamentoExistente;
 
-                const updatedOrderData = { ...order };
+                const updatedOrderData = { ...order, id: id };
                 updatedOrderData.downPayment = totalValue; 
                 updatedOrderData.orderStatus = 'Entregue';
 
@@ -217,7 +254,7 @@ export function initializeOrderListeners(UI, deps) {
                             "Não, obrigado"
                         );
                         if (generate) {
-                            await generateReceiptPdf(updatedOrderData, userCompanyName, UI.showInfoModal);
+                            await generateReceiptPdf(updatedOrderData, userCompanyName(), UI.showInfoModal);
                         }
                     }
                 } 
@@ -246,7 +283,7 @@ export function initializeOrderListeners(UI, deps) {
                             "Não, obrigado"
                         );
                         if (generate) {
-                            await generateReceiptPdf(updatedOrderData, userCompanyName, UI.showInfoModal);
+                            await generateReceiptPdf(updatedOrderData, userCompanyName(), UI.showInfoModal);
                         }
                     }
                 }
@@ -257,21 +294,38 @@ export function initializeOrderListeners(UI, deps) {
         }
     });
 
+    // --- LISTENER DO MODAL DE DETALHES (View/Visualizar) ---
     UI.DOM.viewModal.addEventListener('click', (e) => {
         const btn = e.target.closest('button');
-        if (!btn) return;
-
-        if (btn.id === 'closeViewBtn') { 
+        
+        // 1. Botão FECHAR (X)
+        if (btn && btn.id === 'closeViewBtn') { 
             UI.hideViewModal();
             UI.DOM.viewModal.innerHTML = ''; 
+            return;
         }
+
+        // 2. Lógica do Dropdown (Documentos)
+        if (btn && btn.id === 'documentsBtn') {
+            e.stopPropagation(); 
+            const menu = UI.DOM.viewModal.querySelector('#documentsMenu');
+            if(menu) menu.classList.toggle('hidden');
+            return; 
+        }
+        const menu = UI.DOM.viewModal.querySelector('#documentsMenu');
+        if (menu && !menu.classList.contains('hidden')) {
+            menu.classList.add('hidden');
+        }
+
+        if (!btn) return;
         
+        // Ações de PDF e WhatsApp
         if (btn.id === 'comprehensivePdfBtn') {
             generateComprehensivePdf(btn.dataset.id, services.getAllOrders(), userCompanyName(), UI.showInfoModal);
         }
         
-        if (btn.id === 'sharePdfBtn') {
-            shareOrderPdf(btn.dataset.id, services.getAllOrders(), userCompanyName(), UI.showInfoModal);
+        if (btn.id === 'productionPdfBtn') {
+            generateProductionOrderPdf(btn.dataset.id, services.getAllOrders(), userCompanyName(), UI.showInfoModal);
         }
 
         if (btn.id === 'whatsappBtn') {
@@ -280,26 +334,17 @@ export function initializeOrderListeners(UI, deps) {
                 UI.showInfoModal("Este pedido não possui telefone cadastrado.");
                 return;
             }
-
             let phone = order.clientPhone.replace(/\D/g, '');
             if (phone.length <= 11) phone = '55' + phone;
-
             const company = userCompanyName(); 
             const firstName = order.clientName.split(' ')[0]; 
-            let message = '';
-
-            if (order.orderStatus === 'Entregue') {
-                message = `Olá ${firstName}, seu pedido na ${company} foi finalizado e entregue! Muito obrigado pela preferência. Precisando, é só chamar.`;
-            } else {
-                message = `Olá ${firstName}, aqui é da ${company}. Estou passando para confirmar que recebemos seu pedido e ele já está em produção. Qualquer dúvida, estou à disposição!`;
-            }
-
+            const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+            const approvalLink = `${baseUrl}/aprovacao.html?id=${order.id}`;
+            const message = `Olá ${firstName}, aqui é da ${company}. Segue o link para conferência e aprovação do layout do seu pedido: ${approvalLink} . Por favor, confira os nomes e tamanhos. Qualquer dúvida, estou à disposição!`;
             const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-            
-            // v5.25.2 FIX: Método "Anchor Click" para tentar forçar reutilização de aba
             const link = document.createElement('a');
             link.href = url;
-            link.target = 'whatsapp_tab'; // Tenta forçar o nome
+            link.target = 'whatsapp_tab'; 
             link.rel = 'noopener noreferrer';
             document.body.appendChild(link);
             link.click();
@@ -307,21 +352,33 @@ export function initializeOrderListeners(UI, deps) {
         }
     });
 
+    // --- LISTENER GLOBAL DE TECLAS (ESC) ---
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const viewModalOpen = UI.DOM.viewModal && !UI.DOM.viewModal.classList.contains('hidden');
+            const orderModalOpen = UI.DOM.orderModal && !UI.DOM.orderModal.classList.contains('hidden');
+
+            if (viewModalOpen) {
+                UI.hideViewModal();
+                UI.DOM.viewModal.innerHTML = '';
+            } else if (orderModalOpen) {
+                UI.hideOrderModal();
+            }
+        }
+    });
+
+    // Listeners menores
     UI.DOM.cancelBtn.addEventListener('click', () => UI.hideOrderModal());
-    
     UI.DOM.addPartBtn.addEventListener('click', () => { 
         let { partCounter } = getState();
         partCounter++; 
         UI.addPart({}, partCounter); 
         setState({ partCounter });
     });
-    
     UI.DOM.discount.addEventListener('input', UI.updateFinancials);
-
     UI.DOM.clientPhone.addEventListener('input', (e) => {
      e.target.value = UI.formatPhoneNumber(e.target.value);
     });
-
     UI.DOM.orderModal.addEventListener('click', (e) => {
         const optionsBtn = e.target.closest('button.manage-options-btn'); 
         if (optionsBtn) { 
@@ -329,12 +386,10 @@ export function initializeOrderListeners(UI, deps) {
             setState({ currentOptionType });
             UI.openOptionsModal(currentOptionType, getOptionsFromStorage(currentOptionType)); 
         }
-        
         const removeMockupBtn = e.target.closest('.remove-mockup-btn');
         if (removeMockupBtn) {
             removeMockupBtn.parentElement.remove(); 
         }
-        
         const sourceBtn = e.target.closest('#downPaymentSourceContainer .source-selector');
         if (sourceBtn) {
             UI.updateSourceSelectionUI(UI.DOM.downPaymentSourceContainer, sourceBtn.dataset.source);
