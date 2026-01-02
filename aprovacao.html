@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprovação de Layout - PagLucro Gestor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af', // Azul escuro
+                        success: '#16a34a', // Verde
+                        danger: '#dc2626', // Vermelho
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-gray-800">
+
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-3xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-shirt text-primary text-xl"></i>
+                <span class="font-bold text-lg tracking-tight">Conferência de Pedido</span>
+            </div>
+            <div id="headerStatus" class="text-xs font-bold uppercase tracking-wider px-2 py-1 rounded bg-gray-200 text-gray-600">
+                Carregando...
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto px-4 py-6 space-y-6 pb-24">
+
+        <div id="loadingState" class="text-center py-12">
+            <i class="fa-solid fa-circle-notch fa-spin text-4xl text-gray-300 mb-4"></i>
+            <p class="text-gray-500">Buscando informações do pedido...</p>
+        </div>
+
+        <div id="errorState" class="hidden text-center py-12 bg-white rounded-xl shadow-sm border border-red-100 p-8">
+            <i class="fa-solid fa-circle-exclamation text-4xl text-red-400 mb-4"></i>
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Pedido não encontrado</h2>
+            <p class="text-gray-500 text-sm">O link pode estar incorreto ou o pedido expirou.</p>
+        </div>
+
+        <div id="orderContent" class="hidden space-y-6">
+            
+            <section class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                <div class="p-4 border-b border-gray-50 bg-gray-50 flex justify-between items-center">
+                    <h2 class="font-bold text-gray-700"><i class="fa-regular fa-image mr-2"></i>Layout / Arte</h2>
+                    <span class="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Toque para ampliar</span>
+                </div>
+                <div id="mockupGallery" class="p-4 flex flex-col gap-4">
+                    </div>
+            </section>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <h2 class="font-bold text-gray-700 mb-4 border-b pb-2"><i class="fa-solid fa-list-check mr-2"></i>Resumo do Pedido</h2>
+                <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+                    <div>
+                        <span class="block text-gray-400 text-xs uppercase">Cliente</span>
+                        <span id="clientName" class="font-medium text-lg text-gray-900">--</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="block text-gray-400 text-xs uppercase">Entrega Prevista</span>
+                        <span id="deliveryDate" class="font-bold text-lg text-primary">--</span>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto rounded-lg border border-gray-100">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-gray-50 text-gray-500 font-medium">
+                            <tr>
+                                <th class="p-3">Item / Detalhes</th>
+                                <th class="p-3 text-center">Qtd</th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsTableBody" class="divide-y divide-gray-100">
+                            </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <h2 class="font-bold text-gray-700 mb-2 text-sm uppercase">Observações</h2>
+                <p id="generalObservation" class="text-gray-600 text-sm italic bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    Nenhuma observação.
+                </p>
+            </section>
+
+        </div>
+    </main>
+
+    <footer id="actionFooter" class="hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] p-4 z-40">
+        <div class="max-w-3xl mx-auto grid grid-cols-2 gap-4">
+            <button id="btnRequestChanges" class="flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all">
+                <i class="fa-solid fa-pen"></i>
+                <span class="text-sm sm:text-base">Solicitar Ajuste</span>
+            </button>
+            <button id="btnApprove" class="flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-white bg-green-600 hover:bg-green-700 active:scale-95 shadow-lg shadow-green-200 transition-all">
+                <i class="fa-solid fa-check-double"></i>
+                <span class="text-sm sm:text-base">APROVAR ARTE</span>
+            </button>
+        </div>
+    </footer>
+
+    <div id="feedbackModal" class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+            <div id="modalContent" class="p-6 text-center">
+                </div>
+        </div>
+    </div>
+
+    <script type="module" src="./js/approval.js"></script>
+
+</body>
+</html>
