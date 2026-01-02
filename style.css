@@ -20,12 +20,61 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 .source-selector.active { @apply bg-indigo-600 border-indigo-600 text-white; }
 .source-selector:not(.active) { @apply bg-white border-gray-300 text-gray-700 hover:bg-indigo-50 hover:border-indigo-400; }
 
-.status-badge { @apply text-xs font-semibold py-1 px-2 rounded-full; }
-.status-Pendente { @apply bg-yellow-100 text-yellow-800; }
-.status-Confirmado { @apply bg-blue-100 text-blue-800; }
-.status-Em-Produção { @apply bg-purple-100 text-purple-800; }
-.status-Finalizado { @apply bg-green-100 text-green-800; }
-.status-Entregue { @apply bg-gray-200 text-gray-800; }
+/* === BADGES DE STATUS (Versão Compatível com Navegador) === */
+
+.status-badge {
+    font-size: 0.75rem; /* text-xs */
+    font-weight: 600;   /* font-semibold */
+    padding: 0.25rem 0.5rem; /* py-1 px-2 */
+    border-radius: 9999px; /* rounded-full */
+    display: inline-block; /* Garante que o fundo apareça */
+}
+
+/* Pendente (Amarelo) */
+.status-Pendente {
+    background-color: #fef9c3; /* bg-yellow-100 */
+    color: #854d0e; /* text-yellow-800 */
+}
+
+/* Confirmado (Azul) */
+.status-Confirmado {
+    background-color: #dbeafe; /* bg-blue-100 */
+    color: #1e40af; /* text-blue-800 */
+}
+
+/* Em Produção (Roxo) */
+.status-Em-Produção {
+    background-color: #f3e8ff; /* bg-purple-100 */
+    color: #6b21a8; /* text-purple-800 */
+}
+
+/* Finalizado (Verde) */
+.status-Finalizado {
+    background-color: #dcfce7; /* bg-green-100 */
+    color: #166534; /* text-green-800 */
+}
+
+/* Entregue (Cinza) */
+.status-Entregue {
+    background-color: #e5e7eb; /* bg-gray-200 */
+    color: #1f2937; /* text-gray-800 */
+}
+
+/* === NOVOS STATUS === */
+
+/* Alteração Solicitada (Laranja - Atenção) */
+.status-Alteração-Solicitada {
+    background-color: #ffedd5; /* bg-orange-100 */
+    color: #9a3412; /* text-orange-800 */
+    border: 1px solid #fed7aa; /* border-orange-200 */
+}
+
+/* Aguardando Aprovação (Ciano - Bola com o cliente) */
+.status-Aguardando-Aprovação {
+    background-color: #cffafe; /* bg-cyan-100 */
+    color: #155e75; /* text-cyan-800 */
+    border: 1px solid #a5f3fc; /* border-cyan-200 */
+}
 
 /* === LAYOUT GERAL === */
 .kanban-board { display: flex; overflow-x: auto; padding-bottom: 1rem; gap: 1.5rem; }
@@ -51,3 +100,4 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 #backupReminderBanner {
     z-index: 50; 
 }
+
