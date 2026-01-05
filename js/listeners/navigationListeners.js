@@ -1,4 +1,5 @@
-// js/listeners/navigationListeners.js
+
+// js/listeners/ navigationListeners.js
 
 // v5.7.21: Removida a importação estática de 'UI'.
 // O 'UI' agora é injetado pelo main.js (Orquestrador)
