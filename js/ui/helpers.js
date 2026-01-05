@@ -1,5 +1,5 @@
 // js/ui/helpers.js
-// ==========================================================
+// ===========================================================
 // MÓDULO UI HELPERS (v5.19.1 - IMPROVED UX BUTTONS)
 // Responsabilidade: Fornecer funções "ajudantes" visuais.
 // Atualizado: Melhoria na affordance dos botões Banco/Caixa.
