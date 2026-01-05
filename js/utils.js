@@ -1,6 +1,6 @@
 // js/utils.js
 // =========================================================================
-// v5.27.0 - PRODUCTION OS SUPPORT (BLIND PDF)
+// v5.29.0 - PRODUCTION OS FIX (DYNAMIC HEIGHT)
 // =========================================================================
 import { 
     getFirestore, 
@@ -12,6 +12,7 @@ import {
 import { db } from './firebaseConfig.js';
 import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
 import autoTable from "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm";
+import { calculateOrderTotals } from './financialCalculator.js'; // <--- IMPORTAÇÃO DA CALCULADORA CENTRAL
 
 autoTable.applyPlugin(jsPDF);
 
@@ -138,6 +139,10 @@ const _createPdfDocument = async (order, userCompanyName) => {
     const contentWidth = A4_WIDTH - MARGIN * 2;
     let yPosition = MARGIN;
 
+    // --- 0. CÁLCULO FINANCEIRO CENTRALIZADO ---
+    // Invocamos a "Verdade Única" para garantir consistência
+    const finance = calculateOrderTotals(order);
+
     // --- CABEÇALHO ---
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
@@ -177,7 +182,9 @@ const _createPdfDocument = async (order, userCompanyName) => {
 
     const tableHead = [['Peça / Detalhes', 'Material', 'Cor', 'Qtd', 'V. Un.', 'Subtotal']];
     const tableBody = [];
-    let subTotal = 0;
+    
+    // Nota: Mantemos o cálculo individual AQUI apenas para exibição na tabela (visual).
+    // O total final usará o objeto 'finance' calculado no topo.
 
     (order.parts || []).forEach(p => {
         const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
@@ -189,8 +196,7 @@ const _createPdfDocument = async (order, userCompanyName) => {
         const specificSub = specificQty * (p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0);
         const detailedSub = detailedQty * (p.unitPrice || 0);
         const partSubtotal = standardSub + specificSub + detailedSub;
-        subTotal += partSubtotal;
-
+        
         let detailsText = '';
         if (p.partInputType === 'comum') {
             if (p.sizes && Object.keys(p.sizes).length > 0) {
@@ -252,17 +258,16 @@ const _createPdfDocument = async (order, userCompanyName) => {
     doc.text(obsLines, MARGIN, yPosition);
     yPosition += (obsLines.length * 4) + 8;
 
-    const discount = order.discount || 0;
-    const grandTotal = subTotal - discount;
-    const remaining = grandTotal - (order.downPayment || 0);
-
+    // --- BLOCO FINANCEIRO BLINDADO ---
+    // Usamos os valores do objeto 'finance' (Calculadora Central)
+    
     const financialDetails = [
-        ['Valor Bruto:', `R$ ${subTotal.toFixed(2)}`],
-        ['Desconto:', `R$ ${discount.toFixed(2)}`],
-        ['Adiantamento:', `R$ ${(order.downPayment || 0).toFixed(2)}`],
+        ['Valor Bruto:', `R$ ${finance.grossTotal.toFixed(2)}`], // Subtotal correto
+        ['Desconto:', `R$ ${finance.discount.toFixed(2)}`],
+        ['Adiantamento:', `R$ ${finance.paid.toFixed(2)}`],
         ['Forma de Pgto:', `${order.paymentMethod || 'N/A'}`],
-        ['VALOR TOTAL:', `R$ ${grandTotal.toFixed(2)}`],
-        ['RESTA PAGAR:', `R$ ${remaining.toFixed(2)}`]
+        ['VALOR TOTAL:', `R$ ${finance.total.toFixed(2)}`],
+        ['RESTA PAGAR:', `R$ ${finance.remaining.toFixed(2)}`]
     ];
 
     doc.autoTable({
@@ -448,23 +453,53 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
     });
     yPosition = doc.lastAutoTable.finalY + 8;
 
-    // --- OBSERVAÇÕES TÉCNICAS ---
+    // --- OBSERVAÇÕES TÉCNICAS (MODO DINÂMICO) ---
+    // CORREÇÃO: Layout adaptável para evitar sobreposição
+    
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Observações / Instruções', MARGIN, yPosition);
     yPosition += 5;
-    
-    doc.setDrawColor(150);
-    doc.rect(MARGIN, yPosition, contentWidth, 20); // Caixa para Obs
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
+    
+    // 1. Quebra o texto em linhas baseadas na largura disponível
     const obsLines = doc.splitTextToSize(order.generalObservation || 'Sem observações adicionais.', contentWidth - 4);
+    
+    // 2. Calcula a altura necessária (aprox 5 unidades por linha + padding de 6)
+    // Mantém no mínimo 20 unidades de altura para ficar estético se o texto for curto
+    const lineHeight = 5;
+    const padding = 6;
+    const boxHeight = Math.max(20, (obsLines.length * lineHeight) + padding);
+
+    // 3. Verificação de segurança: Se a caixa for estourar a página, cria nova página
+    // 270 é um limite seguro antes do rodapé
+    if (yPosition + boxHeight > 270) {
+        doc.addPage();
+        yPosition = MARGIN;
+    }
+    
+    // 4. Desenha o Retângulo com a ALTURA DINÂMICA CALCULADA
+    doc.setDrawColor(150);
+    doc.rect(MARGIN, yPosition, contentWidth, boxHeight); 
+    
+    // 5. Escreve o texto dentro da caixa
     doc.text(obsLines, MARGIN + 2, yPosition + 5);
-    yPosition += 25;
+    
+    // 6. Atualiza o cursor para a próxima seção (Controle de Etapas)
+    // Adiciona a altura do box + um espaçamento de 10
+    yPosition += boxHeight + 10;
 
     // --- CHECKLIST DE PROCESSO (Rodapé de Controle) ---
     // [ ] Corte  [ ] Estampa  [ ] Costura  [ ] Revisão
+    
+    // Verifica novamente se o rodapé cabe (caso a caixa tenha ficado exatamente no limite)
+    if (yPosition > 280) {
+        doc.addPage();
+        yPosition = MARGIN;
+    }
+
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text('Controle de Etapas:', MARGIN, yPosition);
@@ -650,7 +685,9 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
     showInfoModal("Gerando recibo...");
 
     try {
-        let subTotal = 0;
+        // --- CÁLCULO FINANCEIRO CENTRALIZADO ---
+        const finance = calculateOrderTotals(orderData); // Usa a calculadora central
+        
         const tableBody = [];
 
         (orderData.parts || []).forEach(p => {
@@ -658,21 +695,11 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
             const specificQty = (p.specifics || []).length;
             const detailedQty = (p.details || []).length;
             const totalQty = standardQty + specificQty + detailedQty;
-
-            const standardSub = standardQty * (p.unitPriceStandard !== undefined ? p.unitPriceStandard : p.unitPrice || 0);
-            const specificSub = specificQty * (p.unitPriceSpecific !== undefined ? p.unitPriceSpecific : p.unitPrice || 0);
-            const detailedSub = detailedQty * (p.unitPrice || 0);
-            
-            subTotal += (standardSub + specificSub + detailedSub);
             
             if (totalQty > 0) {
                 tableBody.push([p.type, totalQty]);
             }
         });
-
-        const discount = orderData.discount || 0;
-        const grandTotal = subTotal - discount;
-        const amountPaid = orderData.downPayment || 0; 
 
         const doc = new jsPDF('p', 'mm', 'a4');
         const A4_WIDTH = 210;
@@ -700,17 +727,17 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
         doc.text(`${orderData.clientPhone || 'N/A'}`, MARGIN + 18, yPosition);
         yPosition += 10;
         
-        // --- RESUMO FINANCEIRO ---
+        // --- RESUMO FINANCEIRO (Usando dados centralizados) ---
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.text('Resumo Financeiro', MARGIN, yPosition);
         yPosition += 6;
 
         const financialDetails = [
-            ['Valor Bruto (Itens):', `R$ ${subTotal.toFixed(2)}`],
-            ['Desconto:', `R$ ${discount.toFixed(2)}`],
-            ['VALOR TOTAL DO PEDIDO:', `R$ ${grandTotal.toFixed(2)}`],
-            ['VALOR PAGO (QUITADO):', `R$ ${amountPaid.toFixed(2)}`]
+            ['Valor Bruto (Itens):', `R$ ${finance.grossTotal.toFixed(2)}`],
+            ['Desconto:', `R$ ${finance.discount.toFixed(2)}`],
+            ['VALOR TOTAL DO PEDIDO:', `R$ ${finance.total.toFixed(2)}`],
+            ['VALOR PAGO (QUITADO):', `R$ ${finance.paid.toFixed(2)}`] // Assume-se que no recibo de quitação, o pago seja igual ao total, ou reflete o status real
         ];
         
         doc.autoTable({
