@@ -1,4 +1,4 @@
-// Importa as funções de autenticação do SDK do Firebase
+// Importa as funções de autenticação do SDK do Firebase -
 import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
 // Importa a instância 'auth' já inicializada e as funções de modais da UI
