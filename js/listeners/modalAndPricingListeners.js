@@ -1,4 +1,4 @@
-// js/listeners/modalAndPricingListeners.js
+// js/listeners/ modalAndPricingListeners.js
 
 // v5.7.22: REMOVIDA importação estática de UI.
 // import * as UI from '../ui.js';
