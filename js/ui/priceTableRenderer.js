@@ -1,4 +1,4 @@
-// ==========================================================
+// ===========================================================
 // MÓDULO PRICE TABLE RENDERER (v4.3.0)
 // Responsabilidade: Gerenciar a renderização e lógica
 // do modal da Tabela de Preços.
