@@ -69,7 +69,7 @@ async function main() {
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
         const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners.js${cacheBuster}`);
-
+        const { initConfigListeners } = await import(`./listeners/configListeners.js${cacheBuster}`);
 
         // ========================================================
         // 2. ESTADO GLOBAL
@@ -450,6 +450,9 @@ async function main() {
 
         // Inicialização dos Listeners
         initializeAuthListeners(UI);
+        // --- ADICIONE ESTA LINHA ---
+        initConfigListeners(); 
+
         initializeNavigationListeners(UI, {
             handleBackup,
             handleRestore,
@@ -506,3 +509,4 @@ async function main() {
     }
 }
 main();
+
