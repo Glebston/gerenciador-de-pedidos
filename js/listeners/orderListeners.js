@@ -1,6 +1,6 @@
 // js/listeners/orderListeners.js
 // ==========================================================
-// MÓDULO ORDER LISTENERS (v5.31.0 - STABLE & PRECISE)
+// MÓDULO ORDER LISTENERS (v5.33.0 - AUTO REPLY)
 // ==========================================================
 
 import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf, generateProductionOrderPdf, runDatabaseMigration } from '../utils.js';
@@ -62,6 +62,29 @@ export function initializeOrderListeners(UI, deps) {
         UI.DOM.modalTitle.addEventListener('click', (e) => {
             if (e.shiftKey) {
                 runDatabaseMigration(UI.showInfoModal);
+            }
+        });
+    }
+
+    // --- AUTOMAÇÃO DE RESPOSTA DE AJUSTE (NOVO) ---
+    if (UI.DOM.orderStatus) {
+        UI.DOM.orderStatus.addEventListener('change', (e) => {
+            // Só executa se mudar para "Aguardando Aprovação"
+            if (e.target.value === 'Aguardando Aprovação') {
+                const today = new Date().toLocaleDateString('pt-BR');
+                const autoMessage = `[Ajuste Realizado em ${today}]: Arte atualizada. Por favor, confira novamente.`;
+                
+                // Evita duplicar a mensagem se já tiver sido inserida hoje na mesma sessão
+                const currentObs = UI.DOM.generalObservation.value;
+                if (!currentObs.includes(autoMessage)) {
+                    // Adiciona uma quebra de linha se já tiver texto
+                    const prefix = currentObs ? '\n\n' : '';
+                    UI.DOM.generalObservation.value = currentObs + prefix + autoMessage;
+                    
+                    // Pequeno feedback visual (piscar a borda verde) para o usuário notar que o texto foi inserido
+                    UI.DOM.generalObservation.classList.add('ring-2', 'ring-green-500', 'transition-all', 'duration-500');
+                    setTimeout(() => UI.DOM.generalObservation.classList.remove('ring-2', 'ring-green-500'), 1000);
+                }
             }
         });
     }
@@ -295,7 +318,7 @@ export function initializeOrderListeners(UI, deps) {
     });
 
     // --- LISTENER DO MODAL DE DETALHES (View/Visualizar) ---
-    UI.DOM.viewModal.addEventListener('click', (e) => {
+    UI.DOM.viewModal.addEventListener('click', async (e) => {
         const btn = e.target.closest('button');
         
         // 1. Botão FECHAR (X)
@@ -310,16 +333,31 @@ export function initializeOrderListeners(UI, deps) {
             e.stopPropagation(); 
             const menu = UI.DOM.viewModal.querySelector('#documentsMenu');
             if(menu) menu.classList.toggle('hidden');
+            // Fecha o outro menu se estiver aberto
+            UI.DOM.viewModal.querySelector('#whatsappMenu')?.classList.add('hidden');
             return; 
         }
-        const menu = UI.DOM.viewModal.querySelector('#documentsMenu');
-        if (menu && !menu.classList.contains('hidden')) {
-            menu.classList.add('hidden');
+
+        // 3. Lógica do Dropdown (WhatsApp) - NOVO
+        if (btn && btn.id === 'whatsappMenuBtn') {
+            e.stopPropagation(); 
+            const menu = UI.DOM.viewModal.querySelector('#whatsappMenu');
+            if(menu) menu.classList.toggle('hidden');
+            // Fecha o outro menu se estiver aberto
+            UI.DOM.viewModal.querySelector('#documentsMenu')?.classList.add('hidden');
+            return; 
         }
+
+        // Fecha qualquer menu se clicar fora dos botões (mas dentro do modal)
+        const docMenu = UI.DOM.viewModal.querySelector('#documentsMenu');
+        if (docMenu && !docMenu.classList.contains('hidden')) docMenu.classList.add('hidden');
+        
+        const zapMenu = UI.DOM.viewModal.querySelector('#whatsappMenu');
+        if (zapMenu && !zapMenu.classList.contains('hidden')) zapMenu.classList.add('hidden');
 
         if (!btn) return;
         
-        // Ações de PDF e WhatsApp
+        // Ações de PDF
         if (btn.id === 'comprehensivePdfBtn') {
             generateComprehensivePdf(btn.dataset.id, services.getAllOrders(), userCompanyName(), UI.showInfoModal);
         }
@@ -328,7 +366,8 @@ export function initializeOrderListeners(UI, deps) {
             generateProductionOrderPdf(btn.dataset.id, services.getAllOrders(), userCompanyName(), UI.showInfoModal);
         }
 
-        if (btn.id === 'whatsappBtn') {
+        // 4. Ação: Abrir WhatsApp (Comportamento Original) - Migrado para o item do menu
+        if (btn.id === 'btnOpenWhatsAppAction') {
             const order = services.getOrderById(btn.dataset.id);
             if (!order || !order.clientPhone) {
                 UI.showInfoModal("Este pedido não possui telefone cadastrado.");
@@ -349,6 +388,28 @@ export function initializeOrderListeners(UI, deps) {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        }
+
+        // 5. Ação: Copiar Link (NOVO)
+        if (btn.id === 'btnCopyLinkAction') {
+            const orderId = btn.dataset.id;
+            const baseUrl = window.location.origin + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+            const approvalLink = `${baseUrl}/aprovacao.html?id=${orderId}`;
+
+            try {
+                await navigator.clipboard.writeText(approvalLink);
+                
+                // Feedback visual temporário no botão
+                const originalContent = btn.innerHTML;
+                btn.innerHTML = `<span class="text-green-600 font-bold flex items-center gap-2"><i class="fa-solid fa-check"></i> Copiado!</span>`;
+                setTimeout(() => {
+                    if (btn) btn.innerHTML = originalContent;
+                }, 1500);
+
+            } catch (err) {
+                console.error("Erro ao copiar link:", err);
+                UI.showInfoModal("Não foi possível copiar o link automaticamente.");
+            }
         }
     });
 
