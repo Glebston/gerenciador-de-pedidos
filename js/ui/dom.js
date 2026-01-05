@@ -1,4 +1,4 @@
-// ==========================================================
+// ===========================================================
 // MÓDULO DOM (v4.3.0 - Patch v5.8.3 - FAB UPDATE)
 // Responsabilidade: Centralizar todos os seletores de 
 // elementos do DOM da aplicação.
