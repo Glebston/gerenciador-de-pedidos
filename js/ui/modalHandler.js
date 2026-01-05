@@ -1,4 +1,4 @@
-// ==========================================================
+// ===========================================================
 // MÓDULO MODAL HANDLER (v4.3.0)
 // Responsabilidade: Gerenciar a exibição e lógica de 
 // todos os modais da aplicação (Info, Confirm, Quitação, etc.)
