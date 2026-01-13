@@ -1,6 +1,6 @@
 // js/listeners/orderListeners.js
 // ==========================================================
-// MÓDULO ORDER LISTENERS (v5.33.0 - AUTO REPLY)
+// MÓDULO ORDER LISTENERS (v5.34.0 - UX Receipt Fix)
 // ==========================================================
 
 import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf, generateProductionOrderPdf, runDatabaseMigration } from '../utils.js';
@@ -161,7 +161,8 @@ export function initializeOrderListeners(UI, deps) {
             UI.hideOrderModal();
             
             // 5. Pós-Salvar (Recibos)
-            if (orderData.orderStatus === 'Finalizado' || orderData.orderStatus === 'Entregue') {
+            // [ATUALIZAÇÃO] Modal de recibo somente ao ENTREGAR. Finalizado não gera recibo automático.
+            if (orderData.orderStatus === 'Entregue') {
                 const generate = await UI.showConfirmModal(
                     "Pedido salvo com sucesso! Deseja gerar o Recibo de Quitação e Entrega?", 
                     "Sim, gerar recibo", 
