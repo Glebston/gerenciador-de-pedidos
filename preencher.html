@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preenchimento de Pedido | PagLucro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #f1f1f1; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 4px; }
+    </style>
+</head>
+<body class="text-gray-800 pb-24">
+
+    <header class="bg-indigo-600 text-white p-4 shadow-lg sticky top-0 z-10">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <img id="companyLogo" class="h-10 w-auto object-contain bg-white rounded p-0.5 hidden" alt="Logo da Empresa">
+                
+                <div id="defaultHeader">
+                    <h1 class="font-bold text-lg leading-tight">Carregando...</h1>
+                    <p class="text-indigo-200 text-xs">PagLucro Gestor</p>
+                </div>
+            </div>
+            
+            <div id="statusBadge" class="text-xs px-2 py-1 rounded-full bg-indigo-500 text-indigo-100 border border-indigo-400 font-medium">
+                Conectando...
+            </div>
+        </div>
+    </header>
+
+    <div id="feedbackMessage" class="hidden p-6 max-w-md mx-auto mt-4"></div>
+
+    <main id="inputForm" class="max-w-md mx-auto p-4 space-y-4 hidden">
+        
+        <div id="orderInfo" class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div class="grid grid-cols-2 gap-4">
+                <div id="clientName" class="text-sm font-semibold text-gray-700"></div>
+                <div id="deliveryDate" class="text-sm font-semibold text-gray-700 text-right"></div>
+            </div>
+            <div id="companyPhone" class="text-xs text-center text-indigo-600 font-semibold mt-3 pt-2 border-t border-gray-100 hidden"></div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl shadow-md border-t-4 border-indigo-500">
+            <h2 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Adicionar Pessoa
+            </h2>
+            
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Nome na Estampa</label>
+                    <input type="text" id="itemName" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder-gray-300" placeholder="Ex: João Silva">
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="col-span-1">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Número</label>
+                        <input type="number" id="itemNumber" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-center font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="10">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tamanho</label>
+                        <select id="itemSize" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="" disabled selected>Selecione...</option>
+                            
+                            <optgroup label="Baby Look">
+                                <option value="BL-PP">Baby Look PP</option>
+                                <option value="BL-P">Baby Look P</option>
+                                <option value="BL-M">Baby Look M</option>
+                                <option value="BL-G">Baby Look G</option>
+                                <option value="BL-GG">Baby Look GG</option>
+                                <option value="BL-XG">Baby Look XG</option>
+                            </optgroup>
+
+                            <optgroup label="Normal">
+                                <option value="PP">PP</option>
+                                <option value="P">P</option>
+                                <option value="M">M</option>
+                                <option value="G">G</option>
+                                <option value="GG">GG</option>
+                                <option value="XG">XG</option>
+                            </optgroup>
+
+                            <optgroup label="Infantil">
+                                <option value="2">2 anos</option>
+                                <option value="4">4 anos</option>
+                                <option value="6">6 anos</option>
+                                <option value="8">8 anos</option>
+                                <option value="10">10 anos</option>
+                                <option value="12">12 anos</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="addItemBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg shadow-md transition-all active:scale-95 mt-2">
+                    Adicionar à Lista
+                </button>
+            </div>
+        </div>
+
+        <div id="listContainer" class="hidden">
+            <div class="flex justify-between items-end mb-2 px-2">
+                <h3 class="font-bold text-gray-600 text-sm uppercase">Itens nesta sessão</h3>
+                <span id="listCountBadge" class="bg-gray-200 text-gray-700 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+            </div>
+            <div id="itemsList" class="space-y-2 pb-20"></div>
+        </div>
+    </main>
+
+    <div id="fixedFooter" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] hidden z-20">
+        <div class="max-w-md mx-auto flex items-center justify-between gap-4">
+            <div class="text-sm text-gray-500">
+                <span id="totalItemsDisplay">0 novos itens</span>
+            </div>
+            <button id="saveListBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg flex-1 transition-colors">
+                Enviar Tudo
+            </button>
+        </div>
+    </div>
+
+    <div id="successModal" class="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 hidden fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full flex flex-col max-h-[85vh]">
+            
+            <div class="p-5 text-center border-b border-gray-100">
+                <div class="w-14 h-14 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800">Sucesso!</h2>
+                <p class="text-sm text-gray-500 mt-1">Confira abaixo o que foi enviado para a fábrica:</p>
+            </div>
+
+            <div class="p-4 bg-gray-50 overflow-y-auto flex-1 scrollbar-thin border-b border-gray-100">
+                <div id="summaryListContent" class="space-y-2"></div>
+            </div>
+
+            <div class="p-4 space-y-3 bg-white rounded-b-2xl">
+                <button id="copySummaryBtn" class="w-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 border border-indigo-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    Copiar Resumo
+                </button>
+                <button onclick="window.location.reload()" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-3 rounded-xl transition-colors shadow-md">
+                    Novo Envio
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/public/fillOrder.js"></script>
+</body>
+</html>
