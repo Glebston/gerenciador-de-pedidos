@@ -1,14 +1,46 @@
 // js/ui/orderRenderer.js
 // ==========================================================
-// MÓDULO ORDER RENDERER (v5.28.0 - WHATSAPP DROPDOWN)
-// Responsabilidade: Gerenciar a renderização de tudo 
-// relacionado a Pedidos: Kanban, Cards, Modal de Detalhes.
+// MÓDULO ORDER RENDERER (v5.35.0 - Clean UI Update)
+// Responsabilidade: Renderizar pedidos e gerenciar links PRO.
+// Status: ATUALIZADO (Remoção de Botão Externo Quebrado)
 // ==========================================================
 
 import { DOM, SIZES_ORDER } from './dom.js';
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// Importação centralizada para garantir consistência de sessão
+import { db, auth } from '../firebaseConfig.js'; 
 
-const getDeliveryCountdown = (deliveryDate) => {
+// --- CONTROLE DE ESTADO GLOBAL DO MÓDULO ---
+
+// Listener Global Único: Fecha menus ao clicar fora
+const closeMenusOnClickOutside = (e) => {
+    if (!e.target.closest('button[id$="Btn"]') && !e.target.closest('div[role="menu"]')) {
+        const allMenus = document.querySelectorAll('[id$="Menu"]');
+        allMenus.forEach(menu => {
+            if (!menu.classList.contains('hidden')) {
+                menu.classList.add('hidden');
+            }
+        });
+    }
+};
+document.addEventListener('click', closeMenusOnClickOutside);
+
+
+// --- FUNÇÕES AUXILIARES ---
+
+const getUserPlan = () => {
+    return localStorage.getItem('userPlan') || 'essencial';
+};
+
+// [ATUALIZADO] Agora aceita 'status' para verificar se está finalizado
+const getDeliveryCountdown = (deliveryDate, status) => {
+    // 1. Prioridade Alta: Se já está pronto, avisa que falta retirar (ignora data)
+    if (status === 'Finalizado') {
+        return { text: '📦 Aguardando retirada', color: 'orange' };
+    }
+
     if (!deliveryDate) return { text: 'Sem data', color: 'gray' };
+    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const delivery = new Date(deliveryDate + 'T00:00:00');
@@ -35,12 +67,15 @@ const generateOrderCardHTML = (order, viewType) => {
     });
     totalValue -= (order.discount || 0);
 
-    const countdown = getDeliveryCountdown(order.deliveryDate);
+    // [ATUALIZADO] Passamos o status para a lógica de countdown
+    const countdown = getDeliveryCountdown(order.deliveryDate, order.orderStatus);
+    
     const countdownColorClasses = {
         red: 'bg-red-100 text-red-800',
         yellow: 'bg-yellow-100 text-yellow-800',
         green: 'bg-green-100 text-green-800',
-        gray: 'bg-gray-100 text-gray-800'
+        gray: 'bg-gray-100 text-gray-800',
+        orange: 'bg-orange-100 text-orange-800' // [NOVO] Estilo para 'Aguardando retirada'
     };
 
     const formattedDeliveryDate = order.deliveryDate ?
@@ -55,11 +90,10 @@ const generateOrderCardHTML = (order, viewType) => {
            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z" /><path d="M5 3a2 2 0 00-2 2v6a1 1 0 102 0V5h6a1 1 0 100-2H5z" /></svg>
         </button>`;
     
-    // Criamos o elemento DOM em vez de string
     const card = document.createElement('div');
     card.className = "bg-white p-4 rounded-xl shadow-md hover:shadow-lg transition-shadow flex flex-col space-y-3 transform hover:-translate-y-1";
     card.dataset.id = order.id;
-    card.dataset.deliveryDate = order.deliveryDate || 'Sem Data'; // Para ordenação no Kanban
+    card.dataset.deliveryDate = order.deliveryDate || 'Sem Data';
 
     card.innerHTML = `
         <div class="flex justify-between items-start">
@@ -91,12 +125,11 @@ const generateOrderCardHTML = (order, viewType) => {
     return card;
 };
 
-/**
- * Prepara o container da lista de pedidos (Kanban ou Grid)
- */
+// --- GERENCIAMENTO DE LISTA (KANBAN/GRID) ---
+
 const setupOrderListContainer = (viewType) => {
-    DOM.ordersList.innerHTML = ''; // Limpa
-    DOM.ordersList.className = ''; // Reseta classes
+    DOM.ordersList.innerHTML = '';
+    DOM.ordersList.className = '';
     if (viewType === 'pending') {
         DOM.ordersList.classList.add('kanban-board');
     } else {
@@ -104,16 +137,12 @@ const setupOrderListContainer = (viewType) => {
     }
 };
 
-/**
- * Procura ou cria uma coluna no Kanban
- */
 const findOrCreateKanbanColumn = (dateKey) => {
     let column = DOM.ordersList.querySelector(`.kanban-column[data-date-key="${dateKey}"]`);
     if (column) {
         return column.querySelector('.kanban-column-content');
     }
 
-    // Coluna não existe, vamos criar
     const formattedDate = dateKey === 'Sem Data' ?
         'Sem Data de Entrega' :
         new Date(dateKey + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -129,7 +158,6 @@ const findOrCreateKanbanColumn = (dateKey) => {
         <div class="kanban-column-content space-y-4"></div>
     `;
 
-    // Insere a coluna na ordem correta
     const allColumns = Array.from(DOM.ordersList.querySelectorAll('.kanban-column'));
     let inserted = false;
     if (dateKey !== 'Sem Data') {
@@ -144,16 +172,12 @@ const findOrCreateKanbanColumn = (dateKey) => {
         }
     }
     if (!inserted) {
-        // Se for "Sem Data" ou mais recente que todas, adiciona no final
         DOM.ordersList.appendChild(column);
     }
     
     return column.querySelector('.kanban-column-content');
 };
 
-/**
- * Atualiza o contador de uma coluna Kanban
- */
 const updateKanbanColumnCounter = (columnContent) => {
     const column = columnContent.closest('.kanban-column');
     if (!column) return;
@@ -162,22 +186,19 @@ const updateKanbanColumnCounter = (columnContent) => {
     const count = columnContent.children.length;
     counter.textContent = count;
     
-    // Se a coluna ficar vazia, remove-a
     if (count === 0) {
         column.remove();
     }
 };
 
-/**
- * Adiciona um card de pedido à UI
- */
+// --- CRUD DE CARDS ---
+
 export const addOrderCard = (order, viewType) => {
     const card = generateOrderCardHTML(order, viewType);
     
     if (viewType === 'pending') {
         const dateKey = order.deliveryDate || 'Sem Data';
         const columnContent = findOrCreateKanbanColumn(dateKey);
-        // Insere o card ordenado por nome dentro da coluna
         const cardsInColumn = Array.from(columnContent.querySelectorAll('.bg-white'));
         let inserted = false;
         for (const existingCard of cardsInColumn) {
@@ -192,7 +213,6 @@ export const addOrderCard = (order, viewType) => {
         }
         updateKanbanColumnCounter(columnContent);
     } else {
-        // Na 'delivered' view (grid), insere ordenado por data (mais novo primeiro)
         const allCards = Array.from(DOM.ordersList.querySelectorAll('.bg-white'));
         let inserted = false;
         const orderDate = new Date(order.deliveryDate || 0);
@@ -209,14 +229,10 @@ export const addOrderCard = (order, viewType) => {
         }
     }
     
-    // Remove o "Nenhum pedido" se for o primeiro
     const placeholder = DOM.ordersList.querySelector('.orders-placeholder');
     if (placeholder) placeholder.remove();
 };
 
-/**
- * Atualiza um card de pedido existente na UI
- */
 export const updateOrderCard = (order, viewType) => {
     const existingCard = DOM.ordersList.querySelector(`[data-id="${order.id}"]`);
     if (!existingCard) {
@@ -305,11 +321,18 @@ const sortSizes = (sizesObject) => {
     });
 };
 
+// --- VISUALIZAÇÃO DETALHADA (MODAL) ---
+
 export const viewOrder = (order) => {
     if (!order) return;
+    
+    const currentPlan = getUserPlan(); 
+    const isPro = currentPlan === 'pro'; // Verificação técnica segura
 
     let subTotal = 0;
-    let partsHtml = (order.parts || []).map(p => {
+    
+    // ATUALIZAÇÃO: Map agora inclui index para Deep Linking
+    let partsHtml = (order.parts || []).map((p, index) => {
         const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
         const specificQty = (p.specifics || []).length;
         const detailedQty = (p.details || []).length;
@@ -354,9 +377,30 @@ export const viewOrder = (order) => {
             unitPriceHtml = `R$ ${(p.unitPrice || 0).toFixed(2)}`;
         }
 
+        // --- LÓGICA DO BOTÃO DE LINK ESPECÍFICO (DEEP LINK - MANTIDO) ---
+        let partLinkBtn = '';
+        if (isPro && p.partInputType === 'detalhado') {
+            partLinkBtn = `
+            <button 
+                data-part-index="${index}" 
+                class="generate-part-link-btn ml-2 text-indigo-600 hover:text-indigo-800 transition-colors p-1 rounded hover:bg-indigo-50" 
+                title="Copiar Link de Preenchimento para ${p.type}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+            </button>`;
+        }
+        // -----------------------------------------------------
+
         return `
             <tr>
-                <td class="py-1 px-2 border">${p.type}${itemsDetailHtml}</td>
+                <td class="py-1 px-2 border">
+                    <div class="flex items-center justify-between">
+                        <span>${p.type}</span>
+                        ${partLinkBtn}
+                    </div>
+                    ${itemsDetailHtml}
+                </td>
                 <td class="py-1 px-2 border">${p.material}</td>
                 <td class="py-1 px-2 border">${p.colorMain}</td>
                 <td class="py-1 px-2 border text-center">${standardQty + specificQty + detailedQty}</td>
@@ -380,9 +424,7 @@ export const viewOrder = (order) => {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm mb-4">
                     <div><strong>Telefone:</strong> ${order.clientPhone || 'N/A'}</div>
                     <div><strong>Status:</strong> <span class="font-semibold">${order.orderStatus}</span></div>
-                    <div><strong>Data do Pedido:</strong> ${order.orderDate ? new Date(order.orderDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}` +
-                    // FIX: Adicionada segurança para evitar erro se orderDate for vazio
-                    `</div>
+                    <div><strong>Data do Pedido:</strong> ${order.orderDate ? new Date(order.orderDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}</div>
                     <div><strong>Data de Entrega:</strong> ${order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A'}</div>
                 </div>
                 <h3 class="font-bold text-lg mt-4">Peças</h3>
@@ -476,4 +518,104 @@ export const viewOrder = (order) => {
         </div>`;
     DOM.viewModal.innerHTML = modalContent;
     DOM.viewModal.classList.remove('hidden');
+
+    // ============================================
+    // 1. CONFIGURAÇÃO DOS MENUS (UI)
+    // ============================================
+    const setupDropdown = (btnId, menuId) => {
+        const btn = document.getElementById(btnId);
+        const menu = document.getElementById(menuId);
+        
+        if (btn && menu) {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Fecha outros menus abertos
+                document.querySelectorAll('[id$="Menu"]').forEach(m => {
+                    if (m.id !== menuId) m.classList.add('hidden');
+                });
+                menu.classList.toggle('hidden');
+            });
+        }
+    };
+
+    setupDropdown('whatsappMenuBtn', 'whatsappMenu');
+    setupDropdown('documentsBtn', 'documentsMenu');
+    // REMOVIDO: Setup do botão Externo, pois ele foi retirado
+
+    // Botão Fechar Modal
+    const btnClose = document.getElementById('closeViewBtn');
+    if (btnClose) {
+        btnClose.addEventListener('click', () => {
+             DOM.viewModal.classList.add('hidden');
+        });
+    }
+
+    // ============================================
+    // LÓGICA DE GERAÇÃO DE LINK (Reutilizável)
+    // ============================================
+    const handleGenerateLink = async (targetBtn, partIndex = null) => {
+        const originalContent = targetBtn.innerHTML;
+        // Feedback visual simples
+        targetBtn.innerHTML = partIndex !== null ? '⏳' : '⏳ Gerando...'; 
+
+        try {
+            const currentUser = auth.currentUser;
+            if (!currentUser) throw new Error("Usuário não autenticado.");
+
+            const userMappingRef = doc(db, "user_mappings", currentUser.uid);
+            const userMappingSnap = await getDoc(userMappingRef);
+
+            let companyId = null;
+            if (userMappingSnap.exists()) {
+                companyId = userMappingSnap.data().companyId;
+            } else {
+                companyId = currentUser.uid;
+            }
+
+            if (!companyId) throw new Error("ID da Empresa não encontrado.");
+
+            const path = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
+            const baseUrl = window.location.origin + path;
+            
+            // --- DEEP LINK LOGIC ---
+            let link = `${baseUrl}/preencher.html?cid=${companyId}&oid=${order.id}`;
+            if (partIndex !== null) {
+                link += `&partIndex=${partIndex}`;
+            }
+
+            await navigator.clipboard.writeText(link);
+            
+            // Feedback de Sucesso
+            if (partIndex !== null) {
+                // Para o botão pequeno (ícone)
+                targetBtn.innerHTML = `<svg class="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+            } else {
+                // Para o botão grande (menu)
+                targetBtn.innerHTML = `<svg class="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> Link Copiado!`;
+                targetBtn.classList.add('bg-green-50');
+            }
+            
+            setTimeout(() => {
+                targetBtn.innerHTML = originalContent;
+                if (partIndex === null) targetBtn.classList.remove('bg-green-50');
+            }, 3000);
+
+        } catch (err) {
+            console.error('Erro na geração do link:', err);
+            alert(`Erro: ${err.message}`);
+            targetBtn.innerHTML = originalContent;
+        }
+    };
+
+    // 2. Listener para o botão Geral (Rodapé) - REMOVIDO
+    // O botão generateFillLinkBtn não existe mais no HTML do rodapé.
+
+    // 3. Listeners para os botões Específicos (Por Peça - Deep Link) - MANTIDO
+    document.querySelectorAll('.generate-part-link-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Evita que o clique afete a linha da tabela se houver listener lá
+            const index = btn.dataset.partIndex;
+            handleGenerateLink(btn, index);
+        });
+    });
 };
