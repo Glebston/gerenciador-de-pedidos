@@ -1,18 +1,19 @@
 // js/utils.js
 // =========================================================================
-// v5.29.0 - PRODUCTION OS FIX (DYNAMIC HEIGHT)
+// v5.30.0 - BRANDING PDF (LOGO & PHONE)
 // =========================================================================
 import { 
-    getFirestore, 
+    doc,
+    getDoc,
     collectionGroup, 
     getDocs, 
     updateDoc 
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-import { db } from './firebaseConfig.js';
+import { db, auth } from './firebaseConfig.js'; // Adicionado AUTH para resolver CompanyID
 import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm";
 import autoTable from "https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm";
-import { calculateOrderTotals } from './financialCalculator.js'; // <--- IMPORTAÇÃO DA CALCULADORA CENTRAL
+import { calculateOrderTotals } from './financialCalculator.js'; 
 
 autoTable.applyPlugin(jsPDF);
 
@@ -31,6 +32,63 @@ export const fileToBase64 = (file) => new Promise((resolve, reject) => {
     reader.onload = () => resolve(reader.result.split(',')[1]);
     reader.onerror = error => reject(error);
 });
+
+// [NOVO] Converte URL (ImgBB) para DataURL (Base64) compatível com jsPDF
+const _urlToBase64 = async (url) => {
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.warn("Falha ao converter imagem para PDF:", error);
+        return null;
+    }
+};
+
+// [NOVO] Busca Logo e Telefone da empresa de forma autônoma
+const _fetchCompanyBrandingData = async () => {
+    try {
+        const user = auth.currentUser;
+        if (!user) return null;
+
+        // 1. Descobre o CompanyID através do mapeamento
+        const mappingRef = doc(db, "user_mappings", user.uid);
+        const mappingSnap = await getDoc(mappingRef);
+        
+        if (!mappingSnap.exists()) return null;
+        const companyId = mappingSnap.data().companyId;
+
+        // 2. Busca configuração de pagamento/branding
+        const configRef = doc(db, `companies/${companyId}/config/payment`);
+        const configSnap = await getDoc(configRef);
+
+        if (configSnap.exists()) {
+            const data = configSnap.data();
+            return {
+                logoUrl: data.logoUrl || null,
+                phone: data.whatsappNumber || null
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error("Erro buscando branding:", error);
+        return null;
+    }
+};
+
+const _formatPhoneDisplay = (phone) => {
+    if (!phone) return "";
+    let clean = phone.replace(/\D/g, '');
+    if (clean.startsWith('55') && clean.length > 11) clean = clean.substring(2);
+    if (clean.length === 11) return `(${clean.substring(0,2)}) ${clean.substring(2,7)}-${clean.substring(7)}`;
+    if (clean.length === 10) return `(${clean.substring(0,2)}) ${clean.substring(2,6)}-${clean.substring(6)}`;
+    return phone;
+};
 
 export const uploadToImgBB = async (base64Image) => {
     const formData = new FormData();
@@ -131,7 +189,7 @@ export const initializeIdleTimer = (dom, logoutHandler) => {
 
 // --- Funções de Geração de PDF (COMERCIAL) ---
 
-const _createPdfDocument = async (order, userCompanyName) => {
+const _createPdfDocument = async (order, userCompanyName, brandingData = null) => {
     const doc = new jsPDF('p', 'mm', 'a4'); 
         
     const A4_WIDTH = 210;
@@ -140,14 +198,41 @@ const _createPdfDocument = async (order, userCompanyName) => {
     let yPosition = MARGIN;
 
     // --- 0. CÁLCULO FINANCEIRO CENTRALIZADO ---
-    // Invocamos a "Verdade Única" para garantir consistência
     const finance = calculateOrderTotals(order);
 
-    // --- CABEÇALHO ---
+    // --- CABEÇALHO COM BRANDING ---
+    let logoHeight = 0;
+
+    // Se houver logo, processa
+    if (brandingData && brandingData.logoBase64) {
+        try {
+            const logoSize = 25; // mm
+            // Adiciona Logo (Esquerda)
+            doc.addImage(brandingData.logoBase64, 'PNG', MARGIN, yPosition, logoSize, logoSize);
+            logoHeight = logoSize;
+        } catch (e) {
+            console.warn("Erro renderizando logo no PDF:", e);
+        }
+    }
+
+    // Texto do Cabeçalho
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text(userCompanyName || 'Relatório de Pedido', A4_WIDTH / 2, yPosition, { align: 'center' });
-    yPosition += 10;
+    
+    // Ajusta Y do texto para alinhar com o logo ou ficar no topo
+    const textStartY = yPosition + 8;
+    
+    doc.text(userCompanyName || 'Relatório de Pedido', A4_WIDTH / 2, textStartY, { align: 'center' });
+    
+    // Se houver telefone, adiciona abaixo do nome
+    if (brandingData && brandingData.phone) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Contato: ${_formatPhoneDisplay(brandingData.phone)}`, A4_WIDTH / 2, textStartY + 6, { align: 'center' });
+    }
+
+    // Atualiza yPosition garantindo que não fique em cima do logo
+    yPosition += Math.max(logoHeight, 20) + 5; 
 
     // --- DADOS DO CLIENTE ---
     doc.setFontSize(12);
@@ -183,9 +268,6 @@ const _createPdfDocument = async (order, userCompanyName) => {
     const tableHead = [['Peça / Detalhes', 'Material', 'Cor', 'Qtd', 'V. Un.', 'Subtotal']];
     const tableBody = [];
     
-    // Nota: Mantemos o cálculo individual AQUI apenas para exibição na tabela (visual).
-    // O total final usará o objeto 'finance' calculado no topo.
-
     (order.parts || []).forEach(p => {
         const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
         const specificQty = (p.specifics || []).length;
@@ -259,10 +341,8 @@ const _createPdfDocument = async (order, userCompanyName) => {
     yPosition += (obsLines.length * 4) + 8;
 
     // --- BLOCO FINANCEIRO BLINDADO ---
-    // Usamos os valores do objeto 'finance' (Calculadora Central)
-    
     const financialDetails = [
-        ['Valor Bruto:', `R$ ${finance.grossTotal.toFixed(2)}`], // Subtotal correto
+        ['Valor Bruto:', `R$ ${finance.grossTotal.toFixed(2)}`], 
         ['Desconto:', `R$ ${finance.discount.toFixed(2)}`],
         ['Adiantamento:', `R$ ${finance.paid.toFixed(2)}`],
         ['Forma de Pgto:', `${order.paymentMethod || 'N/A'}`],
@@ -286,7 +366,7 @@ const _createPdfDocument = async (order, userCompanyName) => {
     });
     yPosition = doc.lastAutoTable.finalY;
 
-    // --- IMAGENS ---
+    // --- IMAGENS (MOCKUPS) ---
     if (order.mockupUrls && order.mockupUrls.length > 0) {
         yPosition += 10;
         if (yPosition > 250) { 
@@ -300,31 +380,21 @@ const _createPdfDocument = async (order, userCompanyName) => {
         
         for (const url of order.mockupUrls) {
             try {
-                const imgData = await new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.crossOrigin = 'Anonymous';
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        resolve(canvas.toDataURL('image/jpeg', 0.9));
-                    };
-                    img.onerror = (err) => reject(new Error(`Falha ao carregar imagem: ${url}`));
-                    img.src = url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`;
-                });
-
-                const imgProps = doc.getImageProperties(imgData);
-                const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+                // Reutilizando lógica de imagem
+                const imgData = await _urlToBase64(url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`);
                 
-                if (yPosition + imgHeight > 280) { 
-                    doc.addPage();
-                    yPosition = MARGIN;
+                if (imgData) {
+                    const imgProps = doc.getImageProperties(imgData);
+                    const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+                    
+                    if (yPosition + imgHeight > 280) { 
+                        doc.addPage();
+                        yPosition = MARGIN;
+                    }
+                    
+                    doc.addImage(imgData, 'JPEG', MARGIN, yPosition, contentWidth, imgHeight);
+                    yPosition += imgHeight + 5;
                 }
-                
-                doc.addImage(imgData, 'JPEG', MARGIN, yPosition, contentWidth, imgHeight);
-                yPosition += imgHeight + 5;
 
             } catch (imgError) {
                 console.error(imgError);
@@ -367,7 +437,6 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
     yPosition += 12;
 
     // --- DADOS PRINCIPAIS ---
-    // Cliente + DATA DE ENTREGA (Em destaque)
     doc.setDrawColor(0);
     doc.setFillColor(245, 245, 245);
     doc.rect(MARGIN, yPosition, contentWidth, 25, 'F');
@@ -388,10 +457,10 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
     
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(200, 0, 0); // Vermelho escuro para atenção
+    doc.setTextColor(200, 0, 0); // Vermelho escuro
     const deliveryText = order.deliveryDate ? new Date(order.deliveryDate + 'T00:00:00').toLocaleDateString('pt-br') : 'A DEFINIR';
     doc.text(deliveryText, A4_WIDTH - MARGIN - 2, yPosition + 15, { align: 'right' });
-    doc.setTextColor(0); // Reset cor
+    doc.setTextColor(0); 
 
     yPosition += 30;
 
@@ -413,7 +482,6 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
         let detailsText = '';
         if (p.partInputType === 'comum') {
             if (p.sizes && Object.keys(p.sizes).length > 0) {
-                // Formatação para facilitar leitura (Grade em linhas separadas)
                 detailsText += Object.entries(p.sizes).map(([cat, sizes]) =>
                     `${cat}: ${sortSizes(sizes).map(([size, qty]) => `${size}(${qty})`).join(', ')}`
                 ).join('\n');
@@ -424,12 +492,11 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
                 ).join('\n');
             }
         } else if (p.partInputType === 'detalhado' && p.details && p.details.length > 0) {
-            // Lista de Nomes e Números
             detailsText = p.details.map(d => `• ${d.name||'--'} (${d.size||'--'}) Nº ${d.number||'--'}`).join('\n');
         }
 
         tableBody.push([
-            { content: `${p.type}\n${detailsText}`, styles: { fontSize: 10 } }, // Fonte maior
+            { content: `${p.type}\n${detailsText}`, styles: { fontSize: 10 } },
             p.material,
             p.colorMain,
             { content: totalQty.toString(), styles: { halign: 'center', fontStyle: 'bold', fontSize: 12 } }
@@ -454,8 +521,6 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
     yPosition = doc.lastAutoTable.finalY + 8;
 
     // --- OBSERVAÇÕES TÉCNICAS (MODO DINÂMICO) ---
-    // CORREÇÃO: Layout adaptável para evitar sobreposição
-    
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Observações / Instruções', MARGIN, yPosition);
@@ -464,37 +529,22 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     
-    // 1. Quebra o texto em linhas baseadas na largura disponível
     const obsLines = doc.splitTextToSize(order.generalObservation || 'Sem observações adicionais.', contentWidth - 4);
-    
-    // 2. Calcula a altura necessária (aprox 5 unidades por linha + padding de 6)
-    // Mantém no mínimo 20 unidades de altura para ficar estético se o texto for curto
     const lineHeight = 5;
     const padding = 6;
     const boxHeight = Math.max(20, (obsLines.length * lineHeight) + padding);
 
-    // 3. Verificação de segurança: Se a caixa for estourar a página, cria nova página
-    // 270 é um limite seguro antes do rodapé
     if (yPosition + boxHeight > 270) {
         doc.addPage();
         yPosition = MARGIN;
     }
     
-    // 4. Desenha o Retângulo com a ALTURA DINÂMICA CALCULADA
     doc.setDrawColor(150);
     doc.rect(MARGIN, yPosition, contentWidth, boxHeight); 
-    
-    // 5. Escreve o texto dentro da caixa
     doc.text(obsLines, MARGIN + 2, yPosition + 5);
-    
-    // 6. Atualiza o cursor para a próxima seção (Controle de Etapas)
-    // Adiciona a altura do box + um espaçamento de 10
     yPosition += boxHeight + 10;
 
-    // --- CHECKLIST DE PROCESSO (Rodapé de Controle) ---
-    // [ ] Corte  [ ] Estampa  [ ] Costura  [ ] Revisão
-    
-    // Verifica novamente se o rodapé cabe (caso a caixa tenha ficado exatamente no limite)
+    // --- CHECKLIST DE PROCESSO ---
     if (yPosition > 280) {
         doc.addPage();
         yPosition = MARGIN;
@@ -512,11 +562,11 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
     stages.forEach(stage => {
         doc.rect(xStage, yPosition - 4, boxSize, boxSize); // Checkbox
         doc.text(stage, xStage + 7, yPosition);
-        xStage += 40; // Espaçamento
+        xStage += 40; 
     });
     yPosition += 10;
 
-    // --- MOCKUPS (Foco Visual) ---
+    // --- MOCKUPS ---
     if (order.mockupUrls && order.mockupUrls.length > 0) {
         yPosition += 10;
         if (yPosition > 200) { 
@@ -530,40 +580,25 @@ const _createProductionPdfDocument = async (order, userCompanyName) => {
         
         for (const url of order.mockupUrls) {
             try {
-                const imgData = await new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.crossOrigin = 'Anonymous';
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        resolve(canvas.toDataURL('image/jpeg', 0.9));
-                    };
-                    img.onerror = (err) => reject(new Error(`Falha img: ${url}`));
-                    img.src = url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`;
-                });
+                const imgData = await _urlToBase64(url.includes('?') ? `${url}&v=${Date.now()}` : `${url}?v=${Date.now()}`);
+                if (imgData) {
+                    const imgProps = doc.getImageProperties(imgData);
+                    let imgWidth = contentWidth;
+                    let imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+                    
+                    if (imgHeight > 200) {
+                        imgHeight = 200;
+                        imgWidth = (imgProps.width * imgHeight) / imgProps.height;
+                    }
 
-                const imgProps = doc.getImageProperties(imgData);
-                // Tenta usar largura total, mas limita altura para caber na página se possível
-                let imgWidth = contentWidth;
-                let imgHeight = (imgProps.height * contentWidth) / imgProps.width;
-                
-                // Se for muito alta, ajusta
-                if (imgHeight > 200) {
-                    imgHeight = 200;
-                    imgWidth = (imgProps.width * imgHeight) / imgProps.height;
+                    if (yPosition + imgHeight > 280) { 
+                        doc.addPage();
+                        yPosition = MARGIN;
+                    }
+                    
+                    doc.addImage(imgData, 'JPEG', MARGIN, yPosition, imgWidth, imgHeight);
+                    yPosition += imgHeight + 10;
                 }
-
-                if (yPosition + imgHeight > 280) { 
-                    doc.addPage();
-                    yPosition = MARGIN;
-                }
-                
-                doc.addImage(imgData, 'JPEG', MARGIN, yPosition, imgWidth, imgHeight);
-                yPosition += imgHeight + 10;
-
             } catch (imgError) {
                 console.error("Erro imagem PDF Prod:", imgError);
             }
@@ -586,7 +621,14 @@ export const generateComprehensivePdf = async (orderId, allOrders, userCompanyNa
     }
 
     try {
-        const { doc, filename } = await _createPdfDocument(order, userCompanyName);
+        // [NOVO] Busca branding antes de gerar
+        const branding = await _fetchCompanyBrandingData();
+        if (branding && branding.logoUrl) {
+            showInfoModal("Baixando logo da empresa...");
+            branding.logoBase64 = await _urlToBase64(branding.logoUrl);
+        }
+
+        const { doc, filename } = await _createPdfDocument(order, userCompanyName, branding);
         doc.save(filename);
         showInfoModal("PDF gerado com sucesso!");
 
@@ -620,7 +662,6 @@ export const generateProductionOrderPdf = async (orderId, allOrders, userCompany
 // 2. COMPARTILHAMENTO TURBO (Celular = Share / PC = Download + WhatsApp)
 // =========================================================================
 export const shareOrderPdf = async (orderId, allOrders, userCompanyName, showInfoModal) => {
-    // Detecta se é dispositivo móvel (Android/iOS)
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     showInfoModal(isMobile ? "Abrindo opções de compartilhar..." : "Preparando PDF para WhatsApp...");
@@ -632,10 +673,15 @@ export const shareOrderPdf = async (orderId, allOrders, userCompanyName, showInf
     }
 
     try {
-        const { doc, filename } = await _createPdfDocument(order, userCompanyName);
+         // [NOVO] Busca branding também no compartilhamento
+         const branding = await _fetchCompanyBrandingData();
+         if (branding && branding.logoUrl) {
+             branding.logoBase64 = await _urlToBase64(branding.logoUrl);
+         }
+
+        const { doc, filename } = await _createPdfDocument(order, userCompanyName, branding);
         
         if (isMobile && navigator.share) {
-            // --- MODO CELULAR (Nativo) ---
             const pdfBlob = doc.output('blob');
             const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
 
@@ -650,12 +696,8 @@ export const shareOrderPdf = async (orderId, allOrders, userCompanyName, showInf
                  showInfoModal("Arquivo baixado. Seu navegador móvel não suporta envio direto.");
             }
         } else {
-            // --- MODO COMPUTADOR (Turbo WhatsApp) ---
-            
-            // 1. Baixar o Arquivo automaticamente
             doc.save(filename);
             
-            // 2. Preparar Link do WhatsApp
             let phone = order.clientPhone ? order.clientPhone.replace(/\D/g, '') : '';
             if (phone.length > 0 && phone.length <= 11) phone = '55' + phone; 
             
@@ -664,10 +706,8 @@ export const shareOrderPdf = async (orderId, allOrders, userCompanyName, showInf
                 ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
                 : `https://wa.me/?text=${encodeURIComponent(message)}`;
 
-            // 3. Abrir WhatsApp em nova aba (com leve delay para garantir que o download iniciou)
             setTimeout(() => {
                 window.open(whatsappUrl, '_blank');
-                // Alerta explicativo
                 showInfoModal("PDF Baixado! Agora basta ARRASTAR o arquivo para a conversa do WhatsApp.");
             }, 800);
         }
@@ -685,8 +725,7 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
     showInfoModal("Gerando recibo...");
 
     try {
-        // --- CÁLCULO FINANCEIRO CENTRALIZADO ---
-        const finance = calculateOrderTotals(orderData); // Usa a calculadora central
+        const finance = calculateOrderTotals(orderData); 
         
         const tableBody = [];
 
@@ -727,7 +766,7 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
         doc.text(`${orderData.clientPhone || 'N/A'}`, MARGIN + 18, yPosition);
         yPosition += 10;
         
-        // --- RESUMO FINANCEIRO (Usando dados centralizados) ---
+        // --- RESUMO FINANCEIRO ---
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.text('Resumo Financeiro', MARGIN, yPosition);
@@ -737,7 +776,7 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
             ['Valor Bruto (Itens):', `R$ ${finance.grossTotal.toFixed(2)}`],
             ['Desconto:', `R$ ${finance.discount.toFixed(2)}`],
             ['VALOR TOTAL DO PEDIDO:', `R$ ${finance.total.toFixed(2)}`],
-            ['VALOR PAGO (QUITADO):', `R$ ${finance.paid.toFixed(2)}`] // Assume-se que no recibo de quitação, o pago seja igual ao total, ou reflete o status real
+            ['VALOR PAGO (QUITADO):', `R$ ${finance.paid.toFixed(2)}`]
         ];
         
         doc.autoTable({
@@ -807,6 +846,7 @@ export const generateReceiptPdf = async (orderData, userCompanyName, showInfoMod
         showInfoModal("Não foi possível gerar o PDF do recibo. Ocorreu um erro interno.");
     }
 };
+
 // --- FERRAMENTA DE MIGRAÇÃO (USO ÚNICO) ---
 export const runDatabaseMigration = async (showInfoModal) => {
     const confirm = window.confirm("ATENÇÃO: Isso vai verificar todos os pedidos do sistema e adicionar o campo ID interno neles. Deseja continuar?");
@@ -816,7 +856,6 @@ export const runDatabaseMigration = async (showInfoModal) => {
     console.log("--- INICIANDO MIGRAÇÃO ---");
 
     try {
-        // Busca TODOS os pedidos de todas as empresas
         const q = collectionGroup(db, 'orders');
         const snapshot = await getDocs(q);
         
@@ -825,10 +864,8 @@ export const runDatabaseMigration = async (showInfoModal) => {
 
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            // Verifica se falta o campo 'id' ou se ele está vazio
             if (!data.id) {
                 console.log(`Corrigindo pedido: ${docSnap.id}`);
-                // Atualiza apenas o campo ID com o código do documento
                 const updatePromise = updateDoc(docSnap.ref, { id: docSnap.id })
                     .then(() => console.log(`-> Sucesso: ${docSnap.id}`))
                     .catch(e => console.error(`-> Erro: ${docSnap.id}`, e));
