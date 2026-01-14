@@ -1,6 +1,6 @@
 // js/main.js
 // ========================================================
-// ORQUESTRADOR CENTRAL (v5.8.0 - SaaS Manager Logic)
+// ORQUESTRADOR CENTRAL (v6.2.0 - Branding Update)
 // ========================================================
 
 async function main() {
@@ -70,6 +70,9 @@ async function main() {
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
         const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners.js${cacheBuster}`);
         const { initConfigListeners } = await import(`./listeners/configListeners.js${cacheBuster}`);
+        
+        // [NOVO] Importação da Lógica de Configurações
+        const { openSettingsModal } = await import(`./listeners/settingsLogic.js${cacheBuster}`);
 
         // ========================================================
         // 2. ESTADO GLOBAL
@@ -130,59 +133,51 @@ async function main() {
                     const companyData = companySnap.data();
                     
                     // ============================================================
-                    // 🛡️ SEGURANÇA AVANÇADA SAAS (Bloqueio & Vencimento)
+                    // 🛡️ SEGURANÇA AVANÇADA SAAS
                     // ============================================================
 
-                    // 1. Exclusão Lógica ou Bloqueio Manual
                     if (companyData.isDeleted === true || companyData.isBlocked === true) {
                         if (!isAdminUser) {
                             console.warn("🚫 Acesso negado: Conta bloqueada ou excluída.");
                             document.getElementById('blockedModal').classList.remove('hidden');
                             document.getElementById('blockedLogoutBtn').onclick = handleLogout;
-                            return; // Encerra execução (não carrega dados)
+                            return; 
                         }
                     }
 
-                    // 2. Verificação de Assinatura (Grace Period)
                     if (!isAdminUser && !companyData.isLifetime && companyData.dueDate) {
                         const today = new Date();
                         today.setHours(0,0,0,0);
-                        
                         const [y, m, d] = companyData.dueDate.split('-').map(Number);
                         const dueDate = new Date(y, m - 1, d);
-                        
-                        // Calcula dias de atraso
                         const diffTime = today - dueDate;
                         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                         if (diffDays > 5) {
-                            // CASO CRÍTICO: Vencido há mais de 5 dias -> BLOQUEIO
                             console.warn(`🚫 Plano vencido há ${diffDays} dias.`);
                             document.getElementById('blockedModal').classList.remove('hidden');
                             document.getElementById('blockedLogoutBtn').onclick = handleLogout;
-                            return; // Encerra execução
+                            return; 
                         } 
                         else if (diffDays > 0) {
-                            // CASO ALERTA: Vencido entre 1 e 5 dias -> AVISO (Permite uso)
                             console.warn(`⚠️ Tolerância: Vencido há ${diffDays} dias.`);
                             document.getElementById('paymentWarningModal').classList.remove('hidden');
                         }
                     }
 
-                    // 3. O Espião (Último Acesso) & Correção de Email
                     updateDoc(companyRef, { 
                         lastAccess: serverTimestamp(),
                         email: user.email 
                     }).catch(e => console.warn("Erro ao rastrear acesso:", e));
 
-                    // 4. Mensageria Inteligente (Lê e apaga)
                     if (companyData.adminMessage && companyData.adminMessage.trim() !== "") {
                         UI.showInfoModal(`🔔 MENSAGEM DO SUPORTE:\n\n${companyData.adminMessage}`);
-                        
-                        // Limpa a mensagem no banco para não repetir
-                        updateDoc(companyRef, { adminMessage: "" })
-                            .catch(e => console.error("Erro ao limpar mensagem lida:", e));
+                        updateDoc(companyRef, { adminMessage: "" }).catch(e => console.error("Erro ao limpar mensagem:", e));
                     }
+
+                    const userPlan = companyData.subscription?.planId || 'essencial';
+                    localStorage.setItem('userPlan', userPlan);
+                    console.log(`💎 [SaaS] Plano Detectado: ${userPlan.toUpperCase()}`);
 
                     // ============================================================
                     // FIM DA LÓGICA DE SEGURANÇA
@@ -193,10 +188,49 @@ async function main() {
                 } else {
                     userCompanyName = user.email; 
                     userBankBalanceConfig = { initialBalance: 0 };
+                    localStorage.setItem('userPlan', 'essencial');
                 }
                 
-                // Configuração da UI após passar pela segurança
+                // ------------------------------------------------------------
+                // [MODIFICAÇÃO BRANDING] Atualização do Menu com Logo da Empresa
+                // ------------------------------------------------------------
                 UI.DOM.userEmail.textContent = userCompanyName;
+
+                try {
+                    // Busca configuração extra (Logo/Pagamento)
+                    const configRef = doc(db, 'companies', userCompanyId, 'config', 'payment');
+                    const configSnap = await getDoc(configRef);
+                    
+                    if (configSnap.exists()) {
+                        const configData = configSnap.data();
+                        
+                        // Se houver URL do Logo, substitui o ícone padrão
+                        if (configData.logoUrl) {
+                            const emailElement = UI.DOM.userEmail;
+                            // Tenta encontrar o container do botão (pai do texto)
+                            const btnContainer = emailElement.parentElement;
+                            
+                            if (btnContainer) {
+                                // Procura o SVG genérico (bonequinho) dentro do botão
+                                const genericIcon = btnContainer.querySelector('svg');
+                                
+                                if (genericIcon) {
+                                    const logoImg = document.createElement('img');
+                                    logoImg.src = configData.logoUrl;
+                                    // Classes para garantir visual circular e contido
+                                    logoImg.className = "w-8 h-8 rounded-full object-contain bg-white border border-gray-200"; 
+                                    logoImg.alt = "Logo Empresa";
+                                    
+                                    genericIcon.replaceWith(logoImg);
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn("⚠️ Erro ao carregar branding no menu:", err);
+                }
+                // ------------------------------------------------------------
+
                 if (UI.DOM.periodFilter) UI.DOM.periodFilter.value = 'thisMonth';
 
                 console.log("🔌 [MAIN] Conectando serviços...");
@@ -216,13 +250,31 @@ async function main() {
                 initializeAndPopulateDatalists(); 
                 UI.updateNavButton(currentDashboardView);
                 
+                // [CORREÇÃO] Conexão Vital: Botão de Configurações (Nome correto do botão)
+                // ------------------------------------------------------------
+                const openSettingsBtn = document.getElementById('companySettingsBtn'); 
+                if (openSettingsBtn) {
+                    openSettingsBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const modal = document.getElementById('settingsModal');
+                        if (modal) {
+                            modal.classList.remove('hidden');
+                            modal.dataset.companyId = userCompanyId;
+                            openSettingsModal(); // Carrega Logo e Dados
+                        }
+                    });
+                } else {
+                    console.warn("⚠️ Botão de configurações (companySettingsBtn) não encontrado no HTML.");
+                }
+                // ------------------------------------------------------------
+
                 // Exibição do App e Carregamento do Admin
                 setTimeout(async () => {
                     UI.DOM.authContainer.classList.add('hidden'); 
                     UI.DOM.app.classList.remove('hidden');
                     
                     if (isAdminUser) {
-                        console.log("👑 Carregando módulo Admin v2...");
+                        console.log("👑 Carregando módulo Admin v3...");
                         try {
                             const { initializeAdminPanel } = await import(`./admin.js${cacheBuster}`);
                             initializeAdminPanel();
@@ -254,10 +306,11 @@ async function main() {
             UI.DOM.app.classList.add('hidden');
             UI.DOM.authContainer.classList.remove('hidden');
             
-            // Garante que os modais de bloqueio sumam ao deslogar
             document.getElementById('blockedModal').classList.add('hidden');
             document.getElementById('paymentWarningModal').classList.add('hidden');
             
+            localStorage.removeItem('userPlan');
+
             cleanupOrderService();
             cleanupFinanceService();
             cleanupPricingService();
@@ -268,7 +321,6 @@ async function main() {
             isAdminUser = false;
         };
 
-        // Ouvinte de Autenticação
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 initializeAppLogic(user);
@@ -450,7 +502,6 @@ async function main() {
 
         // Inicialização dos Listeners
         initializeAuthListeners(UI);
-        // --- ADICIONE ESTA LINHA ---
         initConfigListeners(); 
 
         initializeNavigationListeners(UI, {
@@ -509,4 +560,3 @@ async function main() {
     }
 }
 main();
-
