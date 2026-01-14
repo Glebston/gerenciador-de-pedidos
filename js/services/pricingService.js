@@ -1,4 +1,4 @@
-// Importa as funções necessárias do Firestore-
+// Importa as funções necessárias do Firestore
 import { collection, onSnapshot, doc, deleteDoc, writeBatch, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // Importa a instância 'db' do nosso arquivo de configuração
