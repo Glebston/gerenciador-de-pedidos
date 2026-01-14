@@ -3,7 +3,7 @@
 // MÓDULO ORDER RENDERER (v5.35.0 - Clean UI Update)
 // Responsabilidade: Renderizar pedidos e gerenciar links PRO.
 // Status: ATUALIZADO (Remoção de Botão Externo Quebrado)
-// ==========================================================
+// ============================================================
 
 import { DOM, SIZES_ORDER } from './dom.js';
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
