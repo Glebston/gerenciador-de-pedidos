@@ -1,5 +1,5 @@
-// ===========================================================
-// MÓDULO DOM (v4.3.0 - Patch v5.8.3 - FAB UPDATE)
+// ==========================================================
+// MÓDULO DOM (v4.3.1 - Patch v5.8.3 - FAB UPDATE)
 // Responsabilidade: Centralizar todos os seletores de 
 // elementos do DOM da aplicação.
 // ==========================================================
@@ -176,10 +176,8 @@ export const DOM = {
     backupNowBtn: document.getElementById('backupNowBtn'),
     dismissBackupReminderBtn: document.getElementById('dismissBackupReminderBtn'),
 
-    // --- Ações Rápidas (FAB) ---
+   // --- Ações Rápidas (FAB) ---
     fabContainer: document.getElementById('fabContainer'),
-    fabToggleBtn: document.getElementById('fabToggleBtn'),
-    fabActions: document.getElementById('fabActions'),
-    fabAddIncomeBtn: document.getElementById('fabAddIncomeBtn'),
-    fabAddExpenseBtn: document.getElementById('fabAddExpenseBtn'),
+    fabBtn: document.getElementById('fabMainBtn'),     // ID corrigido conforme index.html
+    fabMenu: document.getElementById('fabMenu'),       // ID corrigido conforme index.html
 };
