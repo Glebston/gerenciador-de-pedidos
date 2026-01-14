@@ -1,5 +1,5 @@
 // js/ui/formHandler.js
-// ===========================================================
+// ==========================================================
 // MÓDULO FORM HANDLER (v5.8.0 - Reorder Support)
 // Responsabilidade: Gerenciar toda a lógica interna do
 // modal de Pedidos, incluindo lista dinâmica e Reordenamento.
