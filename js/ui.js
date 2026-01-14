@@ -1,4 +1,4 @@
-// ===========================================================
+// ==========================================================
 // MÓDULO UI "GERENTE" / "ARQUIVO-BARRIL" (v4.3.5)
 // Responsabilidade: Importar e reexportar funções de 
 // todos os especialistas da UI.
