@@ -1,6 +1,6 @@
 // js/approval.js
 // ==========================================================
-// MÓDULO PÚBLICO DE APROVAÇÃO (v1.3.2 - PIX FIX)
+// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.0 - Branding & Pix)
 // Responsabilidade: Renderizar pedido, calcular totais e 
 // gerenciar fluxo de aprovação com dados da empresa (SaaS).
 // ==========================================================
@@ -10,7 +10,8 @@ let companyConfig = {
     pixKey: "",           // Será preenchido pelo banco
     pixBeneficiary: "",   // Será preenchido pelo banco
     entryPercentage: 0.50, // Padrão 50% caso não configurado
-    whatsappNumber: ""    // Para envio do comprovante
+    whatsappNumber: "",   // Para envio do comprovante e exibição
+    logoUrl: ""           // [NOVO] Logo da empresa
 };
 
 // 2. Importações
@@ -34,6 +35,9 @@ const DOM = {
     footer: document.getElementById('actionFooter'),
     headerStatus: document.getElementById('headerStatus'),
     
+    // [NOVO] Branding
+    brandingHeader: document.getElementById('brandingHeader'),
+
     // Dados
     clientName: document.getElementById('clientName'),
     deliveryDate: document.getElementById('deliveryDate'),
@@ -66,6 +70,29 @@ const formatDate = (dateStr) => {
     return `${d}/${m}/${y}`;
 };
 
+// [NOVO] Formatador de Telefone Visual
+const formatPhoneVisual = (phone) => {
+    if (!phone) return "";
+    // Remove tudo que não é dígito
+    let clean = phone.replace(/\D/g, '');
+    
+    // Se começar com 55 e for longo, remove o DDI
+    if (clean.startsWith('55') && clean.length > 11) {
+        clean = clean.substring(2);
+    }
+    
+    // Aplica máscara (XX) XXXXX-XXXX
+    if (clean.length === 11) {
+        return `(${clean.substring(0,2)}) ${clean.substring(2,7)}-${clean.substring(7)}`;
+    }
+    // Aplica máscara (XX) XXXX-XXXX (Fixo)
+    if (clean.length === 10) {
+        return `(${clean.substring(0,2)}) ${clean.substring(2,6)}-${clean.substring(6)}`;
+    }
+    
+    return phone; // Retorna original se não casar padrão
+};
+
 const showModal = (htmlContent, autoClose = false) => {
     DOM.modalContent.innerHTML = htmlContent;
     DOM.modal.classList.remove('hidden');
@@ -81,7 +108,7 @@ const closeModal = () => DOM.modal.classList.add('hidden');
 const loadCompanySettings = async (companyId) => {
     if (!companyId) return;
     try {
-        // TENTATIVA 1: Configuração Nova (SaaS)
+        // TENTATIVA 1: Configuração Nova (SaaS - Payment & Branding)
         const configRef = doc(db, `companies/${companyId}/config/payment`);
         const snap = await getDoc(configRef);
         
@@ -91,23 +118,51 @@ const loadCompanySettings = async (companyId) => {
             if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
             if (data.entryPercentage !== undefined) companyConfig.entryPercentage = parseFloat(data.entryPercentage);
             if (data.whatsappNumber) companyConfig.whatsappNumber = data.whatsappNumber;
+            
+            // [NOVO] Captura o Logo
+            if (data.logoUrl) companyConfig.logoUrl = data.logoUrl;
         }
 
         // TENTATIVA 2 (FALLBACK): Se não achou PIX na config, tenta na raiz da empresa (Legado)
+        // Nota: O Branding (Logo) prioriza a config nova.
         if (!companyConfig.pixKey) {
             const companyRef = doc(db, `companies/${companyId}`);
             const companySnap = await getDoc(companyRef);
             if (companySnap.exists()) {
                 const data = companySnap.data();
-                // Procura por campos comuns de PIX na raiz
                 if (data.pixKey) companyConfig.pixKey = data.pixKey;
-                if (data.chavePix) companyConfig.pixKey = data.chavePix; // Tenta variação de nome
+                if (data.chavePix) companyConfig.pixKey = data.chavePix;
                 if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
             }
         }
     } catch (error) {
         console.warn("Erro ao carregar configurações:", error);
     }
+};
+
+// [NOVO] Função para aplicar identidade visual
+const applyBranding = () => {
+    if (!companyConfig.logoUrl) return; // Mantém o padrão se não tiver logo
+
+    // Formata o telefone para exibição
+    const displayPhone = formatPhoneVisual(companyConfig.whatsappNumber);
+
+    // Substitui o conteúdo do header
+    // Usamos object-contain para não cortar logos retangulares
+    const brandingHtml = `
+        <img src="${companyConfig.logoUrl}" class="w-12 h-12 rounded-full object-contain bg-white border border-gray-200 shadow-sm" alt="Logo">
+        <div class="flex flex-col">
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Nosso whatsApp</span>
+            ${displayPhone ? `
+                <div class="flex items-center gap-1 text-gray-700 font-bold text-sm">
+                    <i class="fa-brands fa-whatsapp text-green-500"></i>
+                    <span>${displayPhone}</span>
+                </div>
+            ` : '<span class="text-gray-700 font-bold text-sm">Confira seu pedido</span>'}
+        </div>
+    `;
+
+    DOM.brandingHeader.innerHTML = brandingHtml;
 };
 
 const loadOrder = async () => {
@@ -134,12 +189,14 @@ const loadOrder = async () => {
         currentOrderData = docRef.data();
 
         // --- MÁGICA SAAS: Descobre a empresa dona do pedido ---
-        // Estrutura: companies/{companyId}/orders/{orderId}
         const companyId = docRef.ref.parent.parent.id;
         
         // Carrega as configurações dessa empresa específica
         await loadCompanySettings(companyId);
         
+        // [NOVO] Aplica o Branding antes de renderizar o pedido
+        applyBranding();
+
         renderOrder(currentOrderData);
 
     } catch (error) {
