@@ -1,6 +1,6 @@
 // js/admin.js
-// =========================================================
-// MÓDULO ADMINISTRATIVO V3.1 (CRM, Histórico e Correções)
+// ========================================================
+// MÓDULO ADMINISTRATIVO V3.2 (Com Gestão de Planos SaaS)
 // ========================================================
 
 import { db } from './firebaseConfig.js';
@@ -21,7 +21,7 @@ import {
 let usersCache = [];
 
 export async function initializeAdminPanel() {
-    console.log("👑 [ADMIN v3.1] Inicializando CRM com Edição/Exclusão...");
+    console.log("👑 [ADMIN v3.2] Inicializando CRM + Gestão de Planos...");
 
     const adminBtn = document.getElementById('adminPanelBtn');
     const adminModal = document.getElementById('adminModal');
@@ -74,10 +74,15 @@ async function loadUsers() {
                 creationDate = new Date(data.createdAt.seconds * 1000);
             }
 
+            // Lógica de Plano (Novo v3.2)
+            // Se não existir subscription, assume 'essencial' (Legacy)
+            const planId = data.subscription?.planId || 'essencial';
+
             usersCache.push({
                 id: docSnap.id,
                 name: data.companyName || "Empresa (Sem Nome)",
                 email: data.email || "Email não registrado",
+                planId: planId, // Campo novo no Cache
                 isBlocked: data.isBlocked || false,
                 adminMessage: data.adminMessage || "",
                 createdAt: creationDate,
@@ -131,10 +136,22 @@ function renderTable(users) {
                </button>`
             : '';
 
+        // Seletor de Plano (Novo)
+        const isPro = user.planId === 'pro';
+        const planSelectHtml = `
+            <select class="plan-selector text-[10px] font-bold uppercase rounded border-0 py-0.5 px-2 cursor-pointer focus:ring-2 focus:ring-blue-500 shadow-sm ${isPro ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}" data-id="${user.id}">
+                <option value="essencial" ${!isPro ? 'selected' : ''}>Plano PRO</option>
+<option value="pro" ${isPro ? 'selected' : ''}>PREMIUM 🏆</option>
+            </select>
+        `;
+
         row.innerHTML = `
             <td class="p-4 align-top">
-                <div>${nameDisplay}</div>
-                <div class="text-xs text-gray-500 mb-1">${user.email}</div>
+                <div class="flex flex-col gap-1">
+                    <div>${nameDisplay}</div>
+                    <div class="w-fit">${planSelectHtml}</div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">${user.email}</div>
                 <div class="text-[10px] text-gray-400 font-mono select-all bg-gray-100 px-1 rounded w-fit" title="Copiar UID">${user.id}</div>
             </td>
             
@@ -230,6 +247,41 @@ function attachDynamicListeners() {
             const label = e.target.parentElement.nextElementSibling;
             label.textContent = e.target.checked ? 'BLOQUEADO' : 'ATIVO';
             label.className = `text-[10px] mt-1 font-medium ${e.target.checked ? 'text-red-600' : 'text-green-600'}`;
+        });
+    });
+
+    // Listener de PLANO (Novo v3.2)
+    document.querySelectorAll('.plan-selector').forEach(select => {
+        select.addEventListener('change', async (e) => {
+            const id = e.target.dataset.id;
+            const newPlan = e.target.value;
+            
+            // Muda a cor visualmente na hora
+            if (newPlan === 'pro') {
+                e.target.classList.remove('bg-gray-100', 'text-gray-600');
+                e.target.classList.add('bg-indigo-100', 'text-indigo-700');
+            } else {
+                e.target.classList.remove('bg-indigo-100', 'text-indigo-700');
+                e.target.classList.add('bg-gray-100', 'text-gray-600');
+            }
+
+            // Salva na estrutura robusta de assinatura
+            // Usamos merge para não apagar outras infos da assinatura se existirem no futuro
+            try {
+                const ref = doc(db, "companies", id);
+                await updateDoc(ref, { 
+                    "subscription.planId": newPlan,
+                    "subscription.updatedAt": serverTimestamp()
+                });
+                
+                // Atualiza cache local
+                const user = usersCache.find(u => u.id === id);
+                if (user) user.planId = newPlan;
+
+            } catch (error) {
+                console.error("Erro ao atualizar plano:", error);
+                alert("Erro ao salvar plano.");
+            }
         });
     });
 
@@ -510,16 +562,17 @@ async function deleteCompanyLogical(companyId) {
 }
 
 async function handleCreateButton() {
-    const uid = prompt("PASSO 1/3: UID do usuário:");
+    const uid = prompt("PASSO 1/4: UID do usuário:");
     if (!uid) return;
-    const email = prompt("PASSO 2/3: Email:");
+    const email = prompt("PASSO 2/4: Email:");
     if (!email) return;
-    const name = prompt("PASSO 3/3: Nome da Empresa:");
+    const name = prompt("PASSO 3/4: Nome da Empresa:");
     if (!name) return;
-    await createNewCompany(uid.trim(), email.trim(), name.trim());
+const plan = prompt("PASSO 4/4: Digite o ID do plano ('essencial' = Plano PRO | 'pro' = Premium):", "essencial");    
+    await createNewCompany(uid.trim(), email.trim(), name.trim(), plan || 'essencial');
 }
 
-async function createNewCompany(uid, email, name) {
+async function createNewCompany(uid, email, name, planId) {
     try {
         const batch = writeBatch(db);
         const companyRef = doc(db, "companies", uid);
@@ -529,12 +582,16 @@ async function createNewCompany(uid, email, name) {
             createdAt: serverTimestamp(),
             isBlocked: false,
             isDeleted: false,
+            subscription: {
+                planId: planId.toLowerCase(),
+                status: 'active'
+            },
             bankBalanceConfig: { initialBalance: 0 }
         });
         const mappingRef = doc(db, "user_mappings", uid);
         batch.set(mappingRef, { companyId: uid, email: email });
         await batch.commit();
-        alert(`✅ Empresa criada!`);
+        alert(`✅ Empresa criada com plano ${planId.toUpperCase()}!`);
         loadUsers();
     } catch (error) {
         console.error("Erro ao criar:", error);
