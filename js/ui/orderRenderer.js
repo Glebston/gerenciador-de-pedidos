@@ -1,5 +1,5 @@
 // js/ui/orderRenderer.js
-// ==========================================================
+// ===========================================================
 // MÓDULO ORDER RENDERER (v5.35.0 - Clean UI Update)
 // Responsabilidade: Renderizar pedidos e gerenciar links PRO.
 // Status: ATUALIZADO (Remoção de Botão Externo Quebrado)
