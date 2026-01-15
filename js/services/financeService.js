@@ -1,6 +1,6 @@
 // js/services/financeService.js
 // ==========================================================
-// MÓDULO FINANCE SERVICE (v5.20.0 - MULTI-TRANSACTION SUPPORT)
+// MÓDULO FINANCE SERVICE (v5.20.1 - CORREÇÃO SALDO INICIAL)
 // ==========================================================
 
 import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -10,6 +10,7 @@ import { db } from '../firebaseConfig.js';
 let dbCollection = null;
 let allTransactions = [];
 let unsubscribeListener = null;
+let currentCompanyId = null; // [CORREÇÃO] Armazena o ID para uso global no módulo
 
 // --- Funções Privadas do Firestore ---
 
@@ -56,6 +57,7 @@ const setupFirestoreListener = (granularUpdateCallback, getConfigCallback) => {
 // --- API Pública do Módulo ---
 
 export const initializeFinanceService = (companyId, granularUpdateCallback, getConfigCallback) => {
+    currentCompanyId = companyId; // [CORREÇÃO] Salva o ID ao inicializar
     dbCollection = collection(db, `companies/${companyId}/transactions`);
     setupFirestoreListener(granularUpdateCallback, getConfigCallback);
 };
@@ -85,8 +87,11 @@ export const markTransactionAsPaid = async (id) => {
     });
 };
 
-export const saveInitialBalance = async (companyId, newBalance) => {
-    const companyRef = doc(db, "companies", companyId);
+// [CORREÇÃO CRÍTICA] Removemos o parâmetro companyId pois já temos ele salvo
+export const saveInitialBalance = async (newBalance) => {
+    if (!currentCompanyId) throw new Error("Erro Crítico: ID da empresa não inicializado no FinanceService.");
+    
+    const companyRef = doc(db, "companies", currentCompanyId);
     await updateDoc(companyRef, {
         "bankBalanceConfig.initialBalance": parseFloat(newBalance)
     });
@@ -100,12 +105,10 @@ export const getTransactionById = (id) => {
     return allTransactions.find(t => t.id === id);
 };
 
-// ALTERAÇÃO v5.20: Agora retorna ARRAY (filter) em vez de um item único (find)
 export const getTransactionsByOrderId = (orderId) => {
     return allTransactions.filter(t => t.orderId === orderId);
 };
 
-// Mantido para retrocompatibilidade (retorna o primeiro encontrado)
 export const getTransactionByOrderId = (orderId) => {
     return allTransactions.find(t => t.orderId === orderId);
 };
@@ -135,4 +138,5 @@ export const cleanupFinanceService = () => {
     }
     allTransactions = [];
     dbCollection = null;
+    currentCompanyId = null; // Limpa o ID ao sair
 };
