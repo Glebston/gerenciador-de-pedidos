@@ -1,6 +1,7 @@
+
 // js/listeners/financeListeners.js
-// ==========================================================
-// MÓDULO FINANCE LISTENERS (v5.22.4 - FAB INTEGRATION)
+// ===========================================================
+// MÓDULO FINANCE LISTENERS (v5.22.5 - FAB INTEGRATION)
 // ==========================================================
 
 /**
@@ -248,24 +249,71 @@ export function initializeFinanceListeners(UI, deps) {
     });
 
     // --- Ajuste de Saldo ---
+    
+    // 1. Abrir Modal
     UI.DOM.adjustBalanceBtn.addEventListener('click', () => {
-        UI.DOM.initialBalanceInput.value = (getConfig().initialBalance || 0).toFixed(2);
+        // Busca o valor atual e formata com 2 casas decimais
+        const currentBalance = getConfig().initialBalance || 0;
+        UI.DOM.initialBalanceInput.value = currentBalance.toFixed(2);
+        
         UI.DOM.initialBalanceModal.classList.remove('hidden');
+        
+        // UX: Foca automaticamente no campo para facilitar a digitação
+        setTimeout(() => UI.DOM.initialBalanceInput.focus(), 50);
     });
 
+    // 2. Botão Cancelar (A Lógica que faltava!)
+    const closeBalanceModal = () => {
+        UI.DOM.initialBalanceModal.classList.add('hidden');
+    };
+    
+    // Verifica se o botão existe antes de adicionar o evento (Defesa contra erros)
+    if (UI.DOM.cancelBalanceBtn) {
+        UI.DOM.cancelBalanceBtn.addEventListener('click', closeBalanceModal);
+    }
+
+    // 3. Botão Salvar (Com Feedback Visual e Atualização Garantida)
     UI.DOM.saveBalanceBtn.addEventListener('click', async () => {
-        const newBalance = parseFloat(UI.DOM.initialBalanceInput.value);
+        const btn = UI.DOM.saveBalanceBtn;
+        const originalText = btn.textContent; // Guarda o texto "Salvar"
+        
+        // Converte o valor inputado (substitui vírgula por ponto por segurança)
+        const inputValue = UI.DOM.initialBalanceInput.value.replace(',', '.');
+        const newBalance = parseFloat(inputValue);
+
         if (isNaN(newBalance)) {
             UI.showInfoModal("Por favor, insira um valor numérico válido.");
             return;
         }
-        await services.saveInitialBalance(newBalance);
-        setConfig({ initialBalance: newBalance }); 
-        
-        renderFullDashboard(); 
-        UI.DOM.initialBalanceModal.classList.add('hidden');
+
+        try {
+            // UX: Muda o botão para o usuário ver que algo está acontecendo
+            btn.textContent = "Salvando...";
+            btn.disabled = true;
+
+            // Passo A: Aguarda o salvamento no Banco de Dados (Firebase)
+            await services.saveInitialBalance(newBalance);
+            
+            // Passo B: Atualiza IMEDIATAMENTE a configuração local na memória
+            setConfig({ initialBalance: newBalance }); 
+            
+            // Passo C: Força o Dashboard a recalcular tudo agora
+            renderFullDashboard(); 
+            
+            // Passo D: Fecha o modal com sucesso
+            closeBalanceModal();
+
+        } catch (error) {
+            console.error("Erro crítico ao salvar saldo:", error);
+            UI.showInfoModal("Não foi possível atualizar o saldo. Verifique sua conexão.");
+        } finally {
+            // Restaura o botão para o estado original, aconteça o que acontecer
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
     });
 
+    // --- Seletor de Origem (Banco/Caixa) ---
     UI.DOM.transactionSourceContainer.addEventListener('click', (e) => {
         const target = e.target.closest('.source-selector');
         if (target) {
