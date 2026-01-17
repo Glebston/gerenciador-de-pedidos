@@ -1,6 +1,6 @@
 // js/approval.js
 // ==========================================================
-// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.0 - Branding & Pix)
+// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.2 - Hotfix Fallback WhatsApp)
 // Responsabilidade: Renderizar pedido, calcular totais e 
 // gerenciar fluxo de aprovação com dados da empresa (SaaS).
 // ==========================================================
@@ -90,416 +90,288 @@ const formatPhoneVisual = (phone) => {
         return `(${clean.substring(0,2)}) ${clean.substring(2,6)}-${clean.substring(6)}`;
     }
     
-    return phone; // Retorna original se não casar padrão
+    return phone; // Retorna original se não casar com máscaras
 };
 
-const showModal = (htmlContent, autoClose = false) => {
-    DOM.modalContent.innerHTML = htmlContent;
-    DOM.modal.classList.remove('hidden');
-    if (autoClose) {
-        setTimeout(() => DOM.modal.classList.add('hidden'), 3000);
-    }
-};
+// --- Funções Principais ---
 
-const closeModal = () => DOM.modal.classList.add('hidden');
-
-// --- Lógica Principal ---
-
-const loadCompanySettings = async (companyId) => {
-    if (!companyId) return;
+// 1. Carregar Configurações da Empresa (Pix, Logo, Percentual, Whats)
+async function loadCompanySettings(companyId) {
     try {
-        // TENTATIVA 1: Configuração Nova (SaaS - Payment & Branding)
+        // TENTATIVA 1: Buscar na nova estrutura (config/payment)
+        // Definida no Dossiê Técnico como padrão oficial
         const configRef = doc(db, `companies/${companyId}/config/payment`);
-        const snap = await getDoc(configRef);
-        
-        if (snap.exists()) {
-            const data = snap.data();
-            if (data.pixKey) companyConfig.pixKey = data.pixKey;
-            if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
-            if (data.entryPercentage !== undefined) companyConfig.entryPercentage = parseFloat(data.entryPercentage);
-            if (data.whatsappNumber) companyConfig.whatsappNumber = data.whatsappNumber;
-            
-            // [NOVO] Captura o Logo
-            if (data.logoUrl) companyConfig.logoUrl = data.logoUrl;
+        const configSnap = await getDoc(configRef);
+
+        if (configSnap.exists()) {
+            const data = configSnap.data();
+            companyConfig = {
+                ...companyConfig,
+                pixKey: data.pixKey || "",
+                pixBeneficiary: data.pixBeneficiary || "",
+                whatsappNumber: data.whatsappNumber || "", // Pega da config nova
+                logoUrl: data.logoUrl || "",
+                entryPercentage: data.entryPercentage ? parseFloat(data.entryPercentage) / 100 : 0.50
+            };
+            console.log("Configuração carregada de config/payment");
+        } else {
+            throw new Error("Configuração nova não encontrada, tentando fallback...");
         }
 
-        // TENTATIVA 2 (FALLBACK): Se não achou PIX na config, tenta na raiz da empresa (Legado)
-        // Nota: O Branding (Logo) prioriza a config nova.
-        if (!companyConfig.pixKey) {
-            const companyRef = doc(db, `companies/${companyId}`);
-            const companySnap = await getDoc(companyRef);
-            if (companySnap.exists()) {
-                const data = companySnap.data();
-                if (data.pixKey) companyConfig.pixKey = data.pixKey;
-                if (data.chavePix) companyConfig.pixKey = data.chavePix;
-                if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
-            }
-        }
     } catch (error) {
-        console.warn("Erro ao carregar configurações:", error);
+        // TENTATIVA 2 (FALLBACK): Buscar na raiz da empresa (Legado)
+        // Necessário para ambientes de Produção que ainda não migraram
+        console.warn("Usando configuração fallback (raiz da empresa):", error);
+        try {
+            const companyDoc = await getDoc(doc(db, "companies", companyId));
+            if (companyDoc.exists()) {
+                const data = companyDoc.data();
+                companyConfig = {
+                    ...companyConfig,
+                    pixKey: data.pixKey || "",
+                    pixBeneficiary: data.pixBeneficiary || "",
+                    // CORREÇÃO APLICADA AQUI:
+                    // Adicionado fallback para ler o whatsapp da raiz se não existir na config nova
+                    whatsappNumber: data.whatsapp || data.whatsappNumber || "" 
+                };
+            }
+        } catch (fallbackError) {
+            console.error("Erro crítico ao carregar dados da empresa:", fallbackError);
+        }
     }
-};
+}
 
-// [NOVO] Função para aplicar identidade visual
-const applyBranding = () => {
-    if (!companyConfig.logoUrl) return; // Mantém o padrão se não tiver logo
+// 2. Aplicar Branding (Logo e Telefone)
+function applyBranding() {
+    // A. Injetar Telefone no Cabeçalho
+    if (companyConfig.whatsappNumber) {
+        const visualPhone = formatPhoneVisual(companyConfig.whatsappNumber);
+        
+        // Cria elemento de telefone
+        const phoneEl = document.createElement('a');
+        phoneEl.href = `https://wa.me/${companyConfig.whatsappNumber.replace(/\D/g, '')}`;
+        phoneEl.target = "_blank";
+        phoneEl.className = "text-sm font-bold text-gray-700 hover:text-green-600 transition-colors block mt-1";
+        phoneEl.innerText = visualPhone; // Ex: (83) 99916-3523
+        
+        // Insere após o rótulo "NOSSO WHATSAPP"
+        // O HTML tem: <div> <p>NOSSO WHATSAPP</p> </div>
+        const labelContainer = DOM.brandingHeader.querySelector('div:last-child');
+        if(labelContainer) {
+            labelContainer.appendChild(phoneEl);
+        }
+    } else {
+        // Se não tiver telefone (erro), mantém comportamento padrão ou esconde
+        console.warn("Nenhum telefone configurado para exibição.");
+    }
 
-    // Formata o telefone para exibição
-    const displayPhone = formatPhoneVisual(companyConfig.whatsappNumber);
+    // B. Injetar Logo (se houver)
+    if (companyConfig.logoUrl) {
+        const imgContainer = DOM.brandingHeader.querySelector('.w-12'); // A div com fundo cinza
+        if (imgContainer) {
+            imgContainer.innerHTML = ''; // Limpa o ícone padrão
+            const img = document.createElement('img');
+            img.src = companyConfig.logoUrl;
+            img.alt = "Logo da Empresa";
+            img.className = "w-full h-full object-contain rounded-full"; // Ajuste visual
+            imgContainer.appendChild(img);
+            imgContainer.classList.remove('bg-gray-100'); // Remove fundo cinza pra ficar clean
+        }
+    }
+}
 
-    // Substitui o conteúdo do header
-    // Usamos object-contain para não cortar logos retangulares
-    const brandingHtml = `
-        <img src="${companyConfig.logoUrl}" class="w-12 h-12 rounded-full object-contain bg-white border border-gray-200 shadow-sm" alt="Logo">
-        <div class="flex flex-col">
-            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Nosso whatsApp</span>
-            ${displayPhone ? `
-                <div class="flex items-center gap-1 text-gray-700 font-bold text-sm">
-                    <i class="fa-brands fa-whatsapp text-green-500"></i>
-                    <span>${displayPhone}</span>
-                </div>
-            ` : '<span class="text-gray-700 font-bold text-sm">Confira seu pedido</span>'}
-        </div>
-    `;
+// 3. Renderizar Pedido
+function renderOrder(data, docId) {
+    // 3.1 Cabeçalho
+    DOM.clientName.textContent = `${data.clientName} - ${data.teamName || 'Cliente Final'}`;
+    DOM.deliveryDate.textContent = formatDate(data.deliveryDate);
+    
+    // Status
+    DOM.headerStatus.className = "px-4 py-2 rounded-lg text-sm font-bold shadow-sm";
+    
+    if (data.status === 'Aguardando Aprovação') {
+        DOM.headerStatus.classList.add('bg-blue-100', 'text-blue-800');
+        DOM.headerStatus.textContent = 'AGUARDANDO SUA APROVAÇÃO';
+        DOM.footer.classList.remove('hidden'); // Mostra botões
+    } else if (data.status === 'Aprovado') {
+        DOM.headerStatus.classList.add('bg-green-100', 'text-green-800');
+        DOM.headerStatus.textContent = '✅ PEDIDO APROVADO';
+        DOM.footer.classList.add('hidden'); // Esconde botões
+    } else if (data.status === 'Correção Solicitada') {
+        DOM.headerStatus.classList.add('bg-yellow-100', 'text-yellow-800');
+        DOM.headerStatus.textContent = '⚠️ EM ANÁLISE (Correção Solicitada)';
+        DOM.footer.classList.add('hidden');
+    } else {
+        DOM.headerStatus.classList.add('bg-gray-100', 'text-gray-800');
+        DOM.headerStatus.textContent = data.status.toUpperCase();
+        DOM.footer.classList.add('hidden');
+    }
 
-    DOM.brandingHeader.innerHTML = brandingHtml;
-};
+    // 3.2 Mockups (Imagens)
+    DOM.mockupGallery.innerHTML = '';
+    if (data.mockupImages && data.mockupImages.length > 0) {
+        data.mockupImages.forEach(url => {
+            const img = document.createElement('img');
+            img.src = url;
+            img.className = "w-full h-64 object-contain bg-white rounded-lg border border-gray-200 shadow-sm cursor-pointer hover:scale-105 transition-transform";
+            img.onclick = () => window.open(url, '_blank');
+            DOM.mockupGallery.appendChild(img);
+        });
+    } else {
+        DOM.mockupGallery.innerHTML = '<p class="text-gray-500 text-center col-span-2 py-8">Nenhum layout anexado.</p>';
+    }
 
-const loadOrder = async () => {
+    // 3.3 Itens e Totais
+    DOM.itemsTable.innerHTML = '';
+    
+    // Se tiver itens detalhados (Novo padrão)
+    if (data.orderItems && data.orderItems.length > 0) {
+        data.orderItems.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.className = "border-b last:border-0";
+            tr.innerHTML = `
+                <td class="py-3">
+                    <div class="font-medium text-gray-800">${item.type}</div>
+                    <div class="text-xs text-gray-500">${item.details || ''}</div>
+                    ${item.name ? `<div class="text-xs text-blue-600 font-bold mt-1">Nome: ${item.name}</div>` : ''}
+                    ${item.number ? `<div class="text-xs text-blue-600 font-bold">Número: ${item.number}</div>` : ''}
+                    ${item.size ? `<span class="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded mt-1">Tam: ${item.size}</span>` : ''}
+                </td>
+                <td class="py-3 text-right font-medium text-gray-700">${item.quantity}</td>
+            `;
+            DOM.itemsTable.appendChild(tr);
+        });
+    } else {
+        // Legado (se não tiver itens detalhados, tenta usar dados gerais)
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="py-3 text-gray-500 italic">Detalhes consolidados (ver totais)</td>
+            <td class="py-3 text-right">-</td>
+        `;
+        DOM.itemsTable.appendChild(tr);
+    }
+
+    // Cálculo Financeiro
+    const totals = calculateOrderTotals(data.orderItems || [], data.additionalServices || [], data.discount || 0);
+    
+    // Atualiza resumo financeiro na tela
+    document.getElementById('totalQty').textContent = totals.totalQuantity;
+    document.getElementById('totalValue').textContent = formatMoney(totals.totalValue);
+    
+    // Entrada (Calculada com base na % da empresa)
+    const entryValue = totals.totalValue * companyConfig.entryPercentage;
+    document.getElementById('entryValue').textContent = formatMoney(entryValue);
+
+    // Obs
+    DOM.obs.textContent = data.observations || "Nenhuma observação adicional.";
+}
+
+// 4. Inicialização (Entrada do Script)
+async function init() {
     try {
+        // Pega ID da URL (?id=...)
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('id');
 
-        if (!orderId) throw new Error("ID não fornecido");
+        if (!orderId) throw new Error("Link inválido (ID não fornecido).");
 
-        // Busca o pedido em qualquer empresa (Collection Group)
-        const q = query(collectionGroup(db, 'orders'), where('id', '==', orderId));
-        const querySnapshot = await getDocs(q);
+        // Busca Pedido (Collection Group para achar independente da empresa)
+        const ordersQuery = query(collectionGroup(db, 'orders'), where('orderId', '==', orderId));
+        const querySnapshot = await getDocs(ordersQuery);
 
-        if (querySnapshot.empty) {
-            DOM.loading.classList.add('hidden');
-            DOM.error.classList.remove('hidden');
-            DOM.headerStatus.innerText = "Não Encontrado";
-            DOM.headerStatus.className = "text-xs font-bold uppercase px-2 py-1 rounded bg-red-100 text-red-600";
-            return;
-        }
+        if (querySnapshot.empty) throw new Error("Pedido não encontrado ou link expirado.");
 
-        const docRef = querySnapshot.docs[0];
-        currentOrderDoc = docRef.ref;
-        currentOrderData = docRef.data();
-
-        // --- MÁGICA SAAS: Descobre a empresa dona do pedido ---
-        const companyId = docRef.ref.parent.parent.id;
+        currentOrderDoc = querySnapshot.docs[0];
+        currentOrderData = currentOrderDoc.data();
         
-        // Carrega as configurações dessa empresa específica
+        // Pega ID da Empresa dona do pedido
+        const companyId = currentOrderDoc.ref.parent.parent.id;
+
+        // A. Carrega Configurações da Empresa (Await para garantir dados antes de renderizar)
         await loadCompanySettings(companyId);
-        
-        // [NOVO] Aplica o Branding antes de renderizar o pedido
+
+        // B. Aplica Branding (Logo e Fone)
         applyBranding();
 
-        renderOrder(currentOrderData);
+        // C. Renderiza Pedido
+        renderOrder(currentOrderData, currentOrderDoc.id);
 
-    } catch (error) {
-        console.error("Erro ao carregar:", error);
+        // Remove Loading
+        DOM.loading.classList.add('hidden');
+        DOM.content.classList.remove('hidden');
+
+    } catch (err) {
+        console.error(err);
         DOM.loading.classList.add('hidden');
         DOM.error.classList.remove('hidden');
-        DOM.error.querySelector('p').textContent = "Erro de conexão ou link inválido.";
+        document.getElementById('errorMessage').textContent = err.message;
     }
-};
+}
 
-const renderOrder = (order) => {
-    // 1. Cabeçalho
-    DOM.clientName.textContent = order.clientName;
-    DOM.deliveryDate.textContent = formatDate(order.deliveryDate);
-    
-    const statusMap = {
-        'Pendente': { color: 'bg-yellow-100 text-yellow-800', label: 'Novo / Pendente' },
-        'Aguardando Aprovação': { color: 'bg-cyan-100 text-cyan-800', label: 'Aguardando Sua Aprovação' },
-        'Aprovado pelo Cliente': { color: 'bg-green-100 text-green-800', label: 'Aprovado' },
-        'Alteração Solicitada': { color: 'bg-red-100 text-red-800', label: 'Alteração Solicitada' },
-        'Em Produção': { color: 'bg-blue-100 text-blue-800', label: 'Em Produção' },
-        'Entregue': { color: 'bg-gray-100 text-gray-800', label: 'Entregue' }
-    };
-    
-    const statusConfig = statusMap[order.orderStatus] || { color: 'bg-gray-100 text-gray-800', label: order.orderStatus };
-    DOM.headerStatus.className = `text-xs font-bold uppercase px-2 py-1 rounded ${statusConfig.color}`;
-    DOM.headerStatus.textContent = statusConfig.label;
+// 5. Ações de Botões
 
-    // 2. Mockups
-    DOM.mockupGallery.innerHTML = '';
-    if (order.mockupUrls && order.mockupUrls.length > 0) {
-        order.mockupUrls.forEach(url => {
-            const imgContainer = document.createElement('div');
-            imgContainer.className = "relative group rounded-lg overflow-hidden shadow-sm border border-gray-100";
-            imgContainer.innerHTML = `
-                <img src="${url}" class="w-full h-auto object-cover max-h-[500px]" alt="Arte">
-                <a href="${url}" target="_blank" class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                    <span class="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-700 text-xs px-3 py-1 rounded-full shadow-lg font-bold">
-                        <i class="fa-solid fa-expand mr-1"></i> Ver Original
-                    </span>
-                </a>
-            `;
-            DOM.mockupGallery.appendChild(imgContainer);
-        });
-    } else {
-        DOM.mockupGallery.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">Nenhuma imagem anexada.</p>';
-    }
-
-    // 3. Itens
-    DOM.itemsTable.innerHTML = '';
-    (order.parts || []).forEach(p => {
-        let detailsHtml = `<span class="font-bold text-gray-700">${p.type}</span>`;
-        detailsHtml += `<div class="text-xs text-gray-500 mt-0.5">${p.material} | ${p.colorMain}</div>`;
-        
-        if (p.partInputType === 'comum') {
-            if (p.sizes) {
-                const sizesStr = Object.entries(p.sizes).map(([cat, sizesObj]) => {
-                    const s = Object.entries(sizesObj).filter(([,q]) => q > 0).map(([k,v]) => `${k}(${v})`).join(', ');
-                    return s ? `<div class="mt-1"><span class="font-semibold text-gray-600 text-[10px] uppercase">${cat}:</span> ${s}</div>` : '';
-                }).join('');
-                detailsHtml += sizesStr;
-            }
-            if(p.specifics && p.specifics.length) detailsHtml += `<div class="mt-1 text-xs text-blue-600"><i class="fa-solid fa-ruler-combined mr-1"></i>${p.specifics.length} item(s) sob medida</div>`;
-        } else if (p.details && p.details.length) {
-            detailsHtml += `<div class="mt-1 text-xs bg-slate-50 p-1 rounded border border-slate-100">
-                <div class="font-semibold text-gray-500 mb-1">Lista de Nomes (${p.details.length}):</div>
-                ${p.details.map(d => `<span class="inline-block bg-white border px-1 rounded mr-1 mb-1">${d.name} (${d.size})</span>`).join('')}
-            </div>`;
-        }
-        const totalQty = (Object.values(p.sizes || {}).flatMap(x=>Object.values(x)).reduce((a,b)=>a+b,0)) + (p.specifics?.length||0) + (p.details?.length||0);
-        const row = document.createElement('tr');
-        row.innerHTML = `<td class="p-3 align-top border-b border-gray-50">${detailsHtml}</td><td class="p-3 align-top text-center font-bold text-gray-700 border-b border-gray-50">${totalQty}</td>`;
-        DOM.itemsTable.appendChild(row);
-    });
-
-    // 4. --- CARD FINANCEIRO ---
-    const finance = calculateOrderTotals(order);
-    
-    const financeHtml = `
-        <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4 space-y-2 text-sm">
-            <div class="flex justify-between text-gray-600">
-                <span>Subtotal</span>
-                <span>${formatMoney(finance.grossTotal)}</span>
-            </div>
-            ${finance.discount > 0 ? `
-            <div class="flex justify-between text-green-600">
-                <span>Desconto</span>
-                <span>- ${formatMoney(finance.discount)}</span>
-            </div>` : ''}
-            <div class="flex justify-between text-gray-800 font-bold border-t border-slate-200 pt-2 mt-2">
-                <span>Total do Pedido</span>
-                <span>${formatMoney(finance.total)}</span>
-            </div>
-            ${finance.paid > 0 ? `
-            <div class="flex justify-between text-blue-600 mt-1">
-                <span>Já Pago (Sinal)</span>
-                <span>- ${formatMoney(finance.paid)}</span>
-            </div>` : ''}
-            <div class="flex justify-between text-red-600 font-bold text-base mt-2 pt-2 border-t border-slate-200 bg-white p-2 rounded shadow-sm">
-                <span>Restante a Pagar</span>
-                <span>${formatMoney(finance.remaining)}</span>
-            </div>
-        </div>
-    `;
-    
-    const oldFinance = document.getElementById('financeCardDisplay');
-    if(oldFinance) oldFinance.remove();
-    
-    const financeContainer = document.createElement('div');
-    financeContainer.id = 'financeCardDisplay';
-    financeContainer.innerHTML = financeHtml;
-    DOM.itemsTable.parentElement.parentElement.after(financeContainer); 
-
-    // 5. Observações
-    if (order.generalObservation) {
-        DOM.obs.textContent = order.generalObservation;
-        DOM.obs.className = "text-gray-700 text-sm bg-yellow-50 p-3 rounded-lg border border-yellow-100";
-    }
-
-    // 6. Controle do Footer
-    const isActionable = ['Pendente', 'Aguardando Aprovação', 'Alteração Solicitada'].includes(order.orderStatus);
-    
-    if (isActionable) {
-        DOM.loading.classList.add('hidden');
-        DOM.content.classList.remove('hidden');
-        DOM.footer.classList.remove('hidden');
-    } else {
-        DOM.loading.classList.add('hidden');
-        DOM.content.classList.remove('hidden');
-        DOM.footer.classList.add('hidden');
-        const alertDiv = document.createElement('div');
-        alertDiv.className = "bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm text-center mb-4";
-        alertDiv.innerHTML = `<i class="fa-solid fa-lock mr-2"></i>Este pedido já está em: <strong>${statusConfig.label}</strong>.`;
-        const existingAlert = DOM.content.querySelector('.bg-blue-50');
-        if (existingAlert) existingAlert.remove();
-        DOM.content.prepend(alertDiv);
-    }
-};
-
-// --- Ações ---
-
-// APROVAR (Com Lógica de PIX Dinâmica)
+// Aprovado
 DOM.btnApprove.addEventListener('click', async () => {
-    if (!currentOrderDoc || !currentOrderData) return;
+    if(!confirm("Confirmar aprovação do layout e dos dados?")) return;
 
-    // 1. Calcular Valores
-    const finance = calculateOrderTotals(currentOrderData);
-    
-    // Usa a % configurada pela empresa
-    const requiredEntry = finance.total * companyConfig.entryPercentage; 
-    const pendingEntry = requiredEntry - finance.paid;
-
-    // 2. Confirmação Inicial
-    const confirmed = confirm("Tem certeza que deseja APROVAR este layout?");
-    if (!confirmed) return;
-
-    DOM.btnApprove.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processando...';
+    const originalBtnText = DOM.btnApprove.innerHTML;
+    DOM.btnApprove.innerHTML = "Processando...";
     DOM.btnApprove.disabled = true;
 
     try {
-        await updateDoc(currentOrderDoc, {
-            orderStatus: 'Aprovado pelo Cliente',
-            approvalDate: new Date().toISOString(),
-            approvalMeta: { userAgent: navigator.userAgent, timestamp: Date.now() }
+        // Atualiza Status
+        await updateDoc(currentOrderDoc.ref, {
+            status: 'Aprovado',
+            approvedAt: new Date().toISOString(),
+            approvedByClient: true
         });
 
-        // 3. Decide qual Modal mostrar
-        if (pendingEntry > 0.01) { 
-            
-            // --- CÁLCULO VISUAL DA PORCENTAGEM (Ex: 0.5 -> 50) ---
-            const percentDisplay = Math.round(companyConfig.entryPercentage * 100);
+        // Feedback Visual
+        alert("✅ Pedido aprovado com sucesso! Vamos iniciar a produção.");
+        location.reload();
 
-            // Se tiver Pix configurado, MOSTRA. Se não, mostra fallback.
-            // A verificação é simples: se companyConfig.pixKey existir.
-            const hasPix = !!companyConfig.pixKey;
-
-            const pixHtml = hasPix ? `
-                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-2 text-left">
-                    <p class="text-sm text-gray-700 mb-1">Valor do Adiantamento:</p>
-                    <p class="text-2xl font-bold text-gray-900 mb-3">${formatMoney(pendingEntry)}</p>
-                    
-                    <p class="text-xs font-bold text-gray-500 uppercase mb-1">Chave PIX:</p>
-                    <div class="flex gap-2">
-                        <input type="text" value="${companyConfig.pixKey}" id="pixKeyInput" readonly class="w-full bg-white border p-2 rounded text-sm font-mono text-gray-700">
-                        <button id="btnCopyPix" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 rounded font-bold transition">
-                            <i class="fa-regular fa-copy"></i>
-                        </button>
-                    </div>
-                    ${companyConfig.pixBeneficiary ? `<p class="text-center text-xs text-gray-400 mt-1">Beneficiário: ${companyConfig.pixBeneficiary}</p>` : ''}
-                </div>
-            ` : `
-                 <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-2 text-center">
-                    <p class="text-sm text-gray-700 mb-1">Valor do Adiantamento:</p>
-                    <p class="text-2xl font-bold text-gray-900 mb-2">${formatMoney(pendingEntry)}</p>
-                    <p class="text-xs text-gray-500">Combine o pagamento com nosso atendimento.</p>
-                </div>
-            `;
-
-            showModal(`
-                <div class="text-center">
-                    <div class="text-green-500 text-5xl mb-3"><i class="fa-solid fa-circle-check"></i></div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-1">Arte Aprovada!</h3>
-                    
-                    <p class="text-gray-600 text-sm mb-4">
-                        Tudo pronto! Para iniciarmos a produção, é necessário o adiantamento de <strong>${percentDisplay}%</strong>.
-                    </p>
-                    
-                    ${pixHtml}
-
-                    <p class="text-xs text-gray-500 mt-2 mb-6">
-                        Prefere outra forma de pagamento? Combine com nosso atendimento.
-                    </p>
-
-                    <button onclick="location.reload()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-lg transition shadow-sm">
-                        Fechar
-                    </button>
-                </div>
-            `);
-
-            // Só adiciona o listener se houver Pix
-            if (hasPix) {
-                const btnCopy = document.getElementById('btnCopyPix');
-                if (btnCopy) {
-                    btnCopy.onclick = () => {
-                        const input = document.getElementById('pixKeyInput');
-                        input.select();
-                        input.setSelectionRange(0, 99999);
-                        navigator.clipboard.writeText(input.value).then(() => {
-                            btnCopy.innerHTML = '<i class="fa-solid fa-check text-green-600"></i>';
-                            setTimeout(() => btnCopy.innerHTML = '<i class="fa-regular fa-copy"></i>', 2000);
-                        });
-                    };
-                }
-            }
-
-        } else {
-            // Caso 100% pago
-            showModal(`
-                <div class="text-center">
-                    <div class="text-green-500 text-5xl mb-4"><i class="fa-solid fa-circle-check"></i></div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-2">Tudo Certo!</h3>
-                    <p class="text-gray-600">O layout foi aprovado e o pagamento está OK.</p>
-                    <p class="text-blue-600 font-bold mt-2">A produção será iniciada.</p>
-                    <button onclick="location.reload()" class="mt-6 bg-gray-800 text-white px-6 py-2 rounded-lg w-full">OK</button>
-                </div>
-            `);
-        }
-        
-        DOM.footer.classList.add('hidden');
-
-    } catch (error) {
-        console.error("Erro ao aprovar:", error);
-        alert("Ocorreu um erro. Tente novamente.");
-        DOM.btnApprove.innerHTML = '<i class="fa-solid fa-check-double"></i> APROVAR ARTE';
+    } catch (err) {
+        alert("Erro ao aprovar: " + err.message);
+        DOM.btnApprove.innerHTML = originalBtnText;
         DOM.btnApprove.disabled = false;
     }
 });
 
-// SOLICITAR ALTERAÇÃO
+// Solicitar Alteração
 DOM.btnRequest.addEventListener('click', () => {
-    showModal(`
-        <h3 class="text-lg font-bold text-gray-800 mb-2 text-left">O que precisa ser ajustado?</h3>
-        <textarea id="changeReason" class="w-full p-3 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none h-32" placeholder="Ex: O nome 'João' está errado..."></textarea>
-        <div class="flex gap-3 mt-4">
-            <button id="cancelModal" class="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-bold">Cancelar</button>
-            <button id="confirmChange" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold hover:bg-red-600">Enviar Solicitação</button>
-        </div>
-    `);
-
-    document.getElementById('cancelModal').onclick = closeModal;
-    
-    document.getElementById('confirmChange').onclick = async () => {
-        const reason = document.getElementById('changeReason').value.trim();
-        if (!reason) return alert("Descreva o ajuste.");
-
-        const btn = document.getElementById('confirmChange');
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Enviando...';
-        btn.disabled = true;
-
-        try {
-            const newObs = (currentOrderData.generalObservation || '') + `\n\n[Solicitação do Cliente em ${new Date().toLocaleDateString()}]: ${reason}`;
-
-            await updateDoc(currentOrderDoc, {
-                orderStatus: 'Alteração Solicitada',
-                generalObservation: newObs
-            });
-
-            showModal(`
-                <div class="text-center">
-                    <div class="text-blue-500 text-5xl mb-4"><i class="fa-solid fa-paper-plane"></i></div>
-                    <h3 class="text-xl font-bold text-gray-800 mb-2">Solicitação Enviada</h3>
-                    <p class="text-gray-600">Recebemos seu pedido de ajuste.</p>
-                    <button onclick="location.reload()" class="mt-6 bg-gray-800 text-white px-6 py-2 rounded-lg w-full">OK</button>
-                </div>
-            `);
-
-        } catch (error) {
-            console.error("Erro ao solicitar:", error);
-            alert("Erro ao enviar solicitação.");
-            closeModal();
-        }
-    };
+    DOM.modal.classList.remove('hidden');
 });
 
-// Inicializar
-loadOrder();
+// Enviar Feedback (Modal)
+window.sendFeedback = async () => {
+    const feedbackText = document.getElementById('feedbackText').value.trim();
+    if (!feedbackText) return alert("Por favor, descreva o que precisa ser alterado.");
+
+    const btn = document.querySelector('#feedbackModal button[onclick="sendFeedback()"]');
+    const originalText = btn.innerText;
+    btn.innerText = "Enviando...";
+    btn.disabled = true;
+
+    try {
+        await updateDoc(currentOrderDoc.ref, {
+            status: 'Correção Solicitada',
+            clientFeedback: feedbackText,
+            feedbackAt: new Date().toISOString()
+        });
+
+        alert("Solicitação enviada! Entraremos em contato para ajustar.");
+        location.reload();
+
+    } catch (err) {
+        alert("Erro ao enviar: " + err.message);
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
+
+window.closeModal = () => {
+    DOM.modal.classList.add('hidden');
+};
+
+// Iniciar
+init();
