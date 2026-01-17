@@ -1,5 +1,5 @@
 // js/approval.js
-// ==========================================================
+// ============================================================
 // MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.0 - Branding & Pix)
 // Responsabilidade: Renderizar pedido, calcular totais e 
 // gerenciar fluxo de aprovação com dados da empresa (SaaS).
