@@ -152,7 +152,7 @@ const applyBranding = () => {
     const brandingHtml = `
         <img src="${companyConfig.logoUrl}" class="w-12 h-12 rounded-full object-contain bg-white border border-gray-200 shadow-sm" alt="Logo">
         <div class="flex flex-col">
-            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Nosso whatsApp</span>
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Página de aprovação</span>
             ${displayPhone ? `
                 <div class="flex items-center gap-1 text-gray-700 font-bold text-sm">
                     <i class="fa-brands fa-whatsapp text-green-500"></i>
