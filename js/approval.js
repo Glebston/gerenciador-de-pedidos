@@ -1,7 +1,8 @@
 // js/approval.js
 // ==========================================================
-// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.1 - FIX Branding)
-// Correção: Leitura híbrida de whatsapp/whatsappNumber
+// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.2 - FIX Details)
+// Correção 1: Leitura híbrida de whatsapp/whatsappNumber
+// Correção 2: Exibição de Número e Função na lista de nomes
 // ==========================================================
 
 // 1. Configurações Dinâmicas (Inicia com padrões seguros)
@@ -91,7 +92,6 @@ const loadCompanySettings = async (companyId) => {
             if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
             if (data.entryPercentage !== undefined) companyConfig.entryPercentage = parseFloat(data.entryPercentage);
             
-            // --- CORREÇÃO AQUI ---
             // Aceita 'whatsapp' (novo) OU 'whatsappNumber' (legado)
             companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || "";
             
@@ -222,9 +222,24 @@ const renderOrder = (order) => {
             }
             if(p.specifics && p.specifics.length) detailsHtml += `<div class="mt-1 text-xs text-blue-600"><i class="fa-solid fa-ruler-combined mr-1"></i>${p.specifics.length} item(s) sob medida</div>`;
         } else if (p.details && p.details.length) {
+            // --- CORREÇÃO AQUI (MOSTRAR NÚMERO E FUNÇÃO) ---
             detailsHtml += `<div class="mt-1 text-xs bg-slate-50 p-1 rounded border border-slate-100">
                 <div class="font-semibold text-gray-500 mb-1">Lista de Nomes (${p.details.length}):</div>
-                ${p.details.map(d => `<span class="inline-block bg-white border px-1 rounded mr-1 mb-1">${d.name} (${d.size})</span>`).join('')}
+                ${p.details.map(d => {
+                    // Monta texto extra se tiver Número ou Função
+                    let extras = [];
+                    if(d.number) extras.push(`Nº ${d.number}`);
+                    if(d.function) extras.push(d.function);
+                    if(!d.function && d.cargo) extras.push(d.cargo); // Fallback caso salve como 'cargo'
+                    
+                    const extraHtml = extras.length > 0 ? `<span class="text-gray-500 italic"> - ${extras.join(' - ')}</span>` : '';
+
+                    return `<span class="inline-block bg-white border px-1 rounded mr-1 mb-1 shadow-sm">
+                        <span class="font-bold text-gray-700">${d.name}</span> 
+                        <span class="text-gray-500">(${d.size})</span>
+                        ${extraHtml}
+                    </span>`;
+                }).join('')}
             </div>`;
         }
         const totalQty = (Object.values(p.sizes || {}).flatMap(x=>Object.values(x)).reduce((a,b)=>a+b,0)) + (p.specifics?.length||0) + (p.details?.length||0);
