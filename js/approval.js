@@ -112,19 +112,21 @@ const loadCompanySettings = async (companyId) => {
         const configRef = doc(db, `companies/${companyId}/config/payment`);
         const snap = await getDoc(configRef);
         
-        if (configSnap.exists()) {
+       if (configSnap.exists()) {
     const data = configSnap.data();
-
+    
     companyConfig.pixKey = data.pixKey || "";
     companyConfig.pixBeneficiary = data.pixBeneficiary || "";
     companyConfig.entryPercentage = data.entryPercent || 0.50;
-
-    // A CORREÇÃO: Verifica o novo 'whatsapp' primeiro, mas mantém o antigo por segurança
-    companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || "";
-            
-            // [NOVO] Captura o Logo
-            if (data.logoUrl) companyConfig.logoUrl = data.logoUrl;
-        }
+    
+    // --- CORREÇÃO APLICADA ---
+    // Verifica primeiro 'whatsapp' (novo padrão do settingsLogic.js)
+    // Se não achar, tenta 'whatsappNumber' (padrão antigo/dev)
+    companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || ""; 
+    // -------------------------
+    
+    companyConfig.logoUrl = data.logoUrl || "";
+}
 
         // TENTATIVA 2 (FALLBACK): Se não achou PIX na config, tenta na raiz da empresa (Legado)
         // Nota: O Branding (Logo) prioriza a config nova.
