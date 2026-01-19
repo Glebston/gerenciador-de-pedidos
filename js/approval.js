@@ -112,12 +112,15 @@ const loadCompanySettings = async (companyId) => {
         const configRef = doc(db, `companies/${companyId}/config/payment`);
         const snap = await getDoc(configRef);
         
-        if (snap.exists()) {
-            const data = snap.data();
-            if (data.pixKey) companyConfig.pixKey = data.pixKey;
-            if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
-            if (data.entryPercentage !== undefined) companyConfig.entryPercentage = parseFloat(data.entryPercentage);
-            if (data.whatsappNumber) companyConfig.whatsappNumber = data.whatsappNumber;
+        if (configSnap.exists()) {
+    const data = configSnap.data();
+
+    companyConfig.pixKey = data.pixKey || "";
+    companyConfig.pixBeneficiary = data.pixBeneficiary || "";
+    companyConfig.entryPercentage = data.entryPercent || 0.50;
+
+    // A CORREÇÃO: Verifica o novo 'whatsapp' primeiro, mas mantém o antigo por segurança
+    companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || "";
             
             // [NOVO] Captura o Logo
             if (data.logoUrl) companyConfig.logoUrl = data.logoUrl;
