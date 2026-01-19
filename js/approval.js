@@ -1,17 +1,16 @@
 // js/approval.js
-// ============================================================
-// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.0 - Branding & Pix)
-// Responsabilidade: Renderizar pedido, calcular totais e 
-// gerenciar fluxo de aprovação com dados da empresa (SaaS).
+// ==========================================================
+// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.1 - FIX Branding)
+// Correção: Leitura híbrida de whatsapp/whatsappNumber
 // ==========================================================
 
 // 1. Configurações Dinâmicas (Inicia com padrões seguros)
 let companyConfig = {
-    pixKey: "",           // Será preenchido pelo banco
-    pixBeneficiary: "",   // Será preenchido pelo banco
-    entryPercentage: 0.50, // Padrão 50% caso não configurado
-    whatsappNumber: "",   // Para envio do comprovante e exibição
-    logoUrl: ""           // [NOVO] Logo da empresa
+    pixKey: "",           
+    pixBeneficiary: "",   
+    entryPercentage: 0.50, 
+    whatsappNumber: "",   // Armazena o telefone final
+    logoUrl: ""           
 };
 
 // 2. Importações
@@ -34,22 +33,14 @@ const DOM = {
     content: document.getElementById('orderContent'),
     footer: document.getElementById('actionFooter'),
     headerStatus: document.getElementById('headerStatus'),
-    
-    // [NOVO] Branding
     brandingHeader: document.getElementById('brandingHeader'),
-
-    // Dados
     clientName: document.getElementById('clientName'),
     deliveryDate: document.getElementById('deliveryDate'),
     mockupGallery: document.getElementById('mockupGallery'),
     itemsTable: document.getElementById('itemsTableBody'),
     obs: document.getElementById('generalObservation'),
-    
-    // Botões
     btnApprove: document.getElementById('btnApprove'),
     btnRequest: document.getElementById('btnRequestChanges'),
-    
-    // Modal
     modal: document.getElementById('feedbackModal'),
     modalContent: document.getElementById('modalContent')
 };
@@ -59,7 +50,6 @@ let currentOrderDoc = null;
 let currentOrderData = null;
 
 // --- Utilitários ---
-
 const formatMoney = (value) => {
     return (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
@@ -70,35 +60,19 @@ const formatDate = (dateStr) => {
     return `${d}/${m}/${y}`;
 };
 
-// [NOVO] Formatador de Telefone Visual
 const formatPhoneVisual = (phone) => {
     if (!phone) return "";
-    // Remove tudo que não é dígito
     let clean = phone.replace(/\D/g, '');
-    
-    // Se começar com 55 e for longo, remove o DDI
-    if (clean.startsWith('55') && clean.length > 11) {
-        clean = clean.substring(2);
-    }
-    
-    // Aplica máscara (XX) XXXXX-XXXX
-    if (clean.length === 11) {
-        return `(${clean.substring(0,2)}) ${clean.substring(2,7)}-${clean.substring(7)}`;
-    }
-    // Aplica máscara (XX) XXXX-XXXX (Fixo)
-    if (clean.length === 10) {
-        return `(${clean.substring(0,2)}) ${clean.substring(2,6)}-${clean.substring(6)}`;
-    }
-    
-    return phone; // Retorna original se não casar padrão
+    if (clean.startsWith('55') && clean.length > 11) clean = clean.substring(2);
+    if (clean.length === 11) return `(${clean.substring(0,2)}) ${clean.substring(2,7)}-${clean.substring(7)}`;
+    if (clean.length === 10) return `(${clean.substring(0,2)}) ${clean.substring(2,6)}-${clean.substring(6)}`;
+    return phone; 
 };
 
 const showModal = (htmlContent, autoClose = false) => {
     DOM.modalContent.innerHTML = htmlContent;
     DOM.modal.classList.remove('hidden');
-    if (autoClose) {
-        setTimeout(() => DOM.modal.classList.add('hidden'), 3000);
-    }
+    if (autoClose) setTimeout(() => DOM.modal.classList.add('hidden'), 3000);
 };
 
 const closeModal = () => DOM.modal.classList.add('hidden');
@@ -108,56 +82,23 @@ const closeModal = () => DOM.modal.classList.add('hidden');
 const loadCompanySettings = async (companyId) => {
     if (!companyId) return;
     try {
-        // TENTATIVA 1: Configuração Nova (SaaS - Payment & Branding)
         const configRef = doc(db, `companies/${companyId}/config/payment`);
         const snap = await getDoc(configRef);
         
-        // --- INÍCIO DO BLOCO DE CORREÇÃO ---
-if (configSnap.exists()) {
-    const data = configSnap.data(); // Pega os dados brutos do Firebase
-    
-    // 1. Tratamento de Dados (Prioridade para os novos campos)
-    // Se 'whatsapp' (novo) não existir, tenta 'whatsappNumber' (antigo). Se nenhum, fica vazio.
-    const phoneData = data.whatsapp || data.whatsappNumber || "";
-    const logoData = data.logoUrl || "";
-    
-    // Atualiza a configuração global (para uso em outras partes do script)
-    companyConfig.pixKey = data.pixKey || "";
-    companyConfig.pixBeneficiary = data.pixBeneficiary || "";
-    companyConfig.entryPercentage = data.entryPercent || 0.50;
-    companyConfig.whatsappNumber = phoneData;
-    companyConfig.logoUrl = logoData;
-
-    // 2. Renderização Visual Segura
-    // Só tenta desenhar se o elemento HTML existir na tela
-    if (DOM.brandingHeader) {
-        
-        // Se a empresa TEM LOGO, montamos o cabeçalho personalizado
-        if (companyConfig.logoUrl) {
+        if (snap.exists()) {
+            const data = snap.data();
+            if (data.pixKey) companyConfig.pixKey = data.pixKey;
+            if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
+            if (data.entryPercentage !== undefined) companyConfig.entryPercentage = parseFloat(data.entryPercentage);
             
-            // Prepara o HTML do telefone (só aparece se tiver número)
-            // Usa 'companyConfig.whatsappNumber' que acabamos de definir acima
-            const whatsappHtml = companyConfig.whatsappNumber 
-                ? `<span class="text-xs text-green-600 font-bold flex items-center gap-1 mt-1"><i class="fa-brands fa-whatsapp"></i> ${companyConfig.whatsappNumber}</span>` 
-                : '';
+            // --- CORREÇÃO AQUI ---
+            // Aceita 'whatsapp' (novo) OU 'whatsappNumber' (legado)
+            companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || "";
+            
+            if (data.logoUrl) companyConfig.logoUrl = data.logoUrl;
+        }
 
-            // Injeta o HTML
-            DOM.brandingHeader.innerHTML = `
-                <img src="${companyConfig.logoUrl}" alt="Logo Empresa" class="h-12 w-auto object-contain bg-white rounded-md p-1 border border-gray-100 shadow-sm">
-                <div class="flex flex-col justify-center">
-                    <span class="font-bold text-lg leading-tight text-gray-800">${companyConfig.pixBeneficiary || 'Conferência de Pedido'}</span>
-                    ${whatsappHtml}
-                    <span class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Pedido Visualização Web</span>
-                </div>
-            `;
-        } 
-        // Se NÃO tem logo, mantemos o cabeçalho padrão original (não fazemos nada aqui)
-    }
-}
-// --- FIM DO BLOCO DE CORREÇÃO ---
-
-        // TENTATIVA 2 (FALLBACK): Se não achou PIX na config, tenta na raiz da empresa (Legado)
-        // Nota: O Branding (Logo) prioriza a config nova.
+        // Fallback Legado
         if (!companyConfig.pixKey) {
             const companyRef = doc(db, `companies/${companyId}`);
             const companySnap = await getDoc(companyRef);
@@ -173,19 +114,15 @@ if (configSnap.exists()) {
     }
 };
 
-// [NOVO] Função para aplicar identidade visual
 const applyBranding = () => {
-    if (!companyConfig.logoUrl) return; // Mantém o padrão se não tiver logo
+    if (!companyConfig.logoUrl) return; 
 
-    // Formata o telefone para exibição
     const displayPhone = formatPhoneVisual(companyConfig.whatsappNumber);
 
-    // Substitui o conteúdo do header
-    // Usamos object-contain para não cortar logos retangulares
     const brandingHtml = `
         <img src="${companyConfig.logoUrl}" class="w-12 h-12 rounded-full object-contain bg-white border border-gray-200 shadow-sm" alt="Logo">
         <div class="flex flex-col">
-            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Página de aprovação</span>
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Nosso whatsApp</span>
             ${displayPhone ? `
                 <div class="flex items-center gap-1 text-gray-700 font-bold text-sm">
                     <i class="fa-brands fa-whatsapp text-green-500"></i>
@@ -205,7 +142,6 @@ const loadOrder = async () => {
 
         if (!orderId) throw new Error("ID não fornecido");
 
-        // Busca o pedido em qualquer empresa (Collection Group)
         const q = query(collectionGroup(db, 'orders'), where('id', '==', orderId));
         const querySnapshot = await getDocs(q);
 
@@ -221,15 +157,10 @@ const loadOrder = async () => {
         currentOrderDoc = docRef.ref;
         currentOrderData = docRef.data();
 
-        // --- MÁGICA SAAS: Descobre a empresa dona do pedido ---
         const companyId = docRef.ref.parent.parent.id;
         
-        // Carrega as configurações dessa empresa específica
         await loadCompanySettings(companyId);
-        
-        // [NOVO] Aplica o Branding antes de renderizar o pedido
         applyBranding();
-
         renderOrder(currentOrderData);
 
     } catch (error) {
@@ -241,7 +172,6 @@ const loadOrder = async () => {
 };
 
 const renderOrder = (order) => {
-    // 1. Cabeçalho
     DOM.clientName.textContent = order.clientName;
     DOM.deliveryDate.textContent = formatDate(order.deliveryDate);
     
@@ -258,7 +188,6 @@ const renderOrder = (order) => {
     DOM.headerStatus.className = `text-xs font-bold uppercase px-2 py-1 rounded ${statusConfig.color}`;
     DOM.headerStatus.textContent = statusConfig.label;
 
-    // 2. Mockups
     DOM.mockupGallery.innerHTML = '';
     if (order.mockupUrls && order.mockupUrls.length > 0) {
         order.mockupUrls.forEach(url => {
@@ -278,7 +207,6 @@ const renderOrder = (order) => {
         DOM.mockupGallery.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">Nenhuma imagem anexada.</p>';
     }
 
-    // 3. Itens
     DOM.itemsTable.innerHTML = '';
     (order.parts || []).forEach(p => {
         let detailsHtml = `<span class="font-bold text-gray-700">${p.type}</span>`;
@@ -305,9 +233,7 @@ const renderOrder = (order) => {
         DOM.itemsTable.appendChild(row);
     });
 
-    // 4. --- CARD FINANCEIRO ---
     const finance = calculateOrderTotals(order);
-    
     const financeHtml = `
         <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4 space-y-2 text-sm">
             <div class="flex justify-between text-gray-600">
@@ -334,22 +260,18 @@ const renderOrder = (order) => {
             </div>
         </div>
     `;
-    
     const oldFinance = document.getElementById('financeCardDisplay');
     if(oldFinance) oldFinance.remove();
-    
     const financeContainer = document.createElement('div');
     financeContainer.id = 'financeCardDisplay';
     financeContainer.innerHTML = financeHtml;
     DOM.itemsTable.parentElement.parentElement.after(financeContainer); 
 
-    // 5. Observações
     if (order.generalObservation) {
         DOM.obs.textContent = order.generalObservation;
         DOM.obs.className = "text-gray-700 text-sm bg-yellow-50 p-3 rounded-lg border border-yellow-100";
     }
 
-    // 6. Controle do Footer
     const isActionable = ['Pendente', 'Aguardando Aprovação', 'Alteração Solicitada'].includes(order.orderStatus);
     
     if (isActionable) {
@@ -369,20 +291,13 @@ const renderOrder = (order) => {
     }
 };
 
-// --- Ações ---
-
-// APROVAR (Com Lógica de PIX Dinâmica)
 DOM.btnApprove.addEventListener('click', async () => {
     if (!currentOrderDoc || !currentOrderData) return;
 
-    // 1. Calcular Valores
     const finance = calculateOrderTotals(currentOrderData);
-    
-    // Usa a % configurada pela empresa
     const requiredEntry = finance.total * companyConfig.entryPercentage; 
     const pendingEntry = requiredEntry - finance.paid;
 
-    // 2. Confirmação Inicial
     const confirmed = confirm("Tem certeza que deseja APROVAR este layout?");
     if (!confirmed) return;
 
@@ -396,21 +311,14 @@ DOM.btnApprove.addEventListener('click', async () => {
             approvalMeta: { userAgent: navigator.userAgent, timestamp: Date.now() }
         });
 
-        // 3. Decide qual Modal mostrar
         if (pendingEntry > 0.01) { 
-            
-            // --- CÁLCULO VISUAL DA PORCENTAGEM (Ex: 0.5 -> 50) ---
             const percentDisplay = Math.round(companyConfig.entryPercentage * 100);
-
-            // Se tiver Pix configurado, MOSTRA. Se não, mostra fallback.
-            // A verificação é simples: se companyConfig.pixKey existir.
             const hasPix = !!companyConfig.pixKey;
 
             const pixHtml = hasPix ? `
                 <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-2 text-left">
                     <p class="text-sm text-gray-700 mb-1">Valor do Adiantamento:</p>
                     <p class="text-2xl font-bold text-gray-900 mb-3">${formatMoney(pendingEntry)}</p>
-                    
                     <p class="text-xs font-bold text-gray-500 uppercase mb-1">Chave PIX:</p>
                     <div class="flex gap-2">
                         <input type="text" value="${companyConfig.pixKey}" id="pixKeyInput" readonly class="w-full bg-white border p-2 rounded text-sm font-mono text-gray-700">
@@ -432,24 +340,19 @@ DOM.btnApprove.addEventListener('click', async () => {
                 <div class="text-center">
                     <div class="text-green-500 text-5xl mb-3"><i class="fa-solid fa-circle-check"></i></div>
                     <h3 class="text-xl font-bold text-gray-800 mb-1">Arte Aprovada!</h3>
-                    
                     <p class="text-gray-600 text-sm mb-4">
                         Tudo pronto! Para iniciarmos a produção, é necessário o adiantamento de <strong>${percentDisplay}%</strong>.
                     </p>
-                    
                     ${pixHtml}
-
                     <p class="text-xs text-gray-500 mt-2 mb-6">
                         Prefere outra forma de pagamento? Combine com nosso atendimento.
                     </p>
-
                     <button onclick="location.reload()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-lg transition shadow-sm">
                         Fechar
                     </button>
                 </div>
             `);
 
-            // Só adiciona o listener se houver Pix
             if (hasPix) {
                 const btnCopy = document.getElementById('btnCopyPix');
                 if (btnCopy) {
@@ -466,7 +369,6 @@ DOM.btnApprove.addEventListener('click', async () => {
             }
 
         } else {
-            // Caso 100% pago
             showModal(`
                 <div class="text-center">
                     <div class="text-green-500 text-5xl mb-4"><i class="fa-solid fa-circle-check"></i></div>
@@ -477,9 +379,7 @@ DOM.btnApprove.addEventListener('click', async () => {
                 </div>
             `);
         }
-        
         DOM.footer.classList.add('hidden');
-
     } catch (error) {
         console.error("Erro ao aprovar:", error);
         alert("Ocorreu um erro. Tente novamente.");
@@ -488,7 +388,6 @@ DOM.btnApprove.addEventListener('click', async () => {
     }
 });
 
-// SOLICITAR ALTERAÇÃO
 DOM.btnRequest.addEventListener('click', () => {
     showModal(`
         <h3 class="text-lg font-bold text-gray-800 mb-2 text-left">O que precisa ser ajustado?</h3>
@@ -534,5 +433,4 @@ DOM.btnRequest.addEventListener('click', () => {
     };
 });
 
-// Inicializar
 loadOrder();
