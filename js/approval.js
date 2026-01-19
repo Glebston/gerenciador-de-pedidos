@@ -112,16 +112,34 @@ const loadCompanySettings = async (companyId) => {
         const configRef = doc(db, `companies/${companyId}/config/payment`);
         const snap = await getDoc(configRef);
         
-        if (snap.exists()) {
-            const data = snap.data();
-            if (data.pixKey) companyConfig.pixKey = data.pixKey;
-            if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
-            if (data.entryPercentage !== undefined) companyConfig.entryPercentage = parseFloat(data.entryPercentage);
-            if (data.whatsappNumber) companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || "";
-            
-            // [NOVO] Captura o Logo
-            if (data.logoUrl) companyConfig.logoUrl = data.logoUrl;
-        }
+        if (configSnap.exists()) {
+    const data = configSnap.data();
+    
+    // --- 1. LEITURA DE DADOS (O ajuste anterior) ---
+    companyConfig.pixKey = data.pixKey || "";
+    companyConfig.pixBeneficiary = data.pixBeneficiary || "";
+    companyConfig.entryPercentage = data.entryPercent || 0.50;
+    
+    // Aqui garantimos que ele pegue 'whatsapp' (novo) OU 'whatsappNumber' (antigo)
+    companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || ""; 
+    
+    companyConfig.logoUrl = data.logoUrl || "";
+
+    // --- 2. RENDERIZAÇÃO VISUAL (O ajuste novo) ---
+    // Agora que temos os dados acima, desenhamos o cabeçalho
+    if (companyConfig.logoUrl && DOM.brandingHeader) {
+        DOM.brandingHeader.innerHTML = `
+            <img src="${companyConfig.logoUrl}" alt="Logo Empresa" class="h-12 w-auto object-contain bg-white rounded-md p-1 border border-gray-100 shadow-sm">
+            <div class="flex flex-col justify-center">
+                <span class="font-bold text-lg leading-tight text-gray-800">${companyConfig.pixBeneficiary || 'Conferência de Pedido'}</span>
+                
+                ${companyConfig.whatsappNumber ? `<span class="text-xs text-green-600 font-bold flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i> ${companyConfig.whatsappNumber}</span>` : ''}
+                
+                <span class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Pedido Visualização Web</span>
+            </div>
+        `;
+    }
+}
 
         // TENTATIVA 2 (FALLBACK): Se não achou PIX na config, tenta na raiz da empresa (Legado)
         // Nota: O Branding (Logo) prioriza a config nova.
