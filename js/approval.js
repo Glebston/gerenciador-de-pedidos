@@ -112,34 +112,49 @@ const loadCompanySettings = async (companyId) => {
         const configRef = doc(db, `companies/${companyId}/config/payment`);
         const snap = await getDoc(configRef);
         
-        if (configSnap.exists()) {
-    const data = configSnap.data();
+        // --- INÍCIO DO BLOCO DE CORREÇÃO ---
+if (configSnap.exists()) {
+    const data = configSnap.data(); // Pega os dados brutos do Firebase
     
-    // --- 1. LEITURA DE DADOS (O ajuste anterior) ---
+    // 1. Tratamento de Dados (Prioridade para os novos campos)
+    // Se 'whatsapp' (novo) não existir, tenta 'whatsappNumber' (antigo). Se nenhum, fica vazio.
+    const phoneData = data.whatsapp || data.whatsappNumber || "";
+    const logoData = data.logoUrl || "";
+    
+    // Atualiza a configuração global (para uso em outras partes do script)
     companyConfig.pixKey = data.pixKey || "";
     companyConfig.pixBeneficiary = data.pixBeneficiary || "";
     companyConfig.entryPercentage = data.entryPercent || 0.50;
-    
-    // Aqui garantimos que ele pegue 'whatsapp' (novo) OU 'whatsappNumber' (antigo)
-    companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || ""; 
-    
-    companyConfig.logoUrl = data.logoUrl || "";
+    companyConfig.whatsappNumber = phoneData;
+    companyConfig.logoUrl = logoData;
 
-    // --- 2. RENDERIZAÇÃO VISUAL (O ajuste novo) ---
-    // Agora que temos os dados acima, desenhamos o cabeçalho
-    if (companyConfig.logoUrl && DOM.brandingHeader) {
-        DOM.brandingHeader.innerHTML = `
-            <img src="${companyConfig.logoUrl}" alt="Logo Empresa" class="h-12 w-auto object-contain bg-white rounded-md p-1 border border-gray-100 shadow-sm">
-            <div class="flex flex-col justify-center">
-                <span class="font-bold text-lg leading-tight text-gray-800">${companyConfig.pixBeneficiary || 'Conferência de Pedido'}</span>
-                
-                ${companyConfig.whatsappNumber ? `<span class="text-xs text-green-600 font-bold flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i> ${companyConfig.whatsappNumber}</span>` : ''}
-                
-                <span class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Pedido Visualização Web</span>
-            </div>
-        `;
+    // 2. Renderização Visual Segura
+    // Só tenta desenhar se o elemento HTML existir na tela
+    if (DOM.brandingHeader) {
+        
+        // Se a empresa TEM LOGO, montamos o cabeçalho personalizado
+        if (companyConfig.logoUrl) {
+            
+            // Prepara o HTML do telefone (só aparece se tiver número)
+            // Usa 'companyConfig.whatsappNumber' que acabamos de definir acima
+            const whatsappHtml = companyConfig.whatsappNumber 
+                ? `<span class="text-xs text-green-600 font-bold flex items-center gap-1 mt-1"><i class="fa-brands fa-whatsapp"></i> ${companyConfig.whatsappNumber}</span>` 
+                : '';
+
+            // Injeta o HTML
+            DOM.brandingHeader.innerHTML = `
+                <img src="${companyConfig.logoUrl}" alt="Logo Empresa" class="h-12 w-auto object-contain bg-white rounded-md p-1 border border-gray-100 shadow-sm">
+                <div class="flex flex-col justify-center">
+                    <span class="font-bold text-lg leading-tight text-gray-800">${companyConfig.pixBeneficiary || 'Conferência de Pedido'}</span>
+                    ${whatsappHtml}
+                    <span class="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Pedido Visualização Web</span>
+                </div>
+            `;
+        } 
+        // Se NÃO tem logo, mantemos o cabeçalho padrão original (não fazemos nada aqui)
     }
 }
+// --- FIM DO BLOCO DE CORREÇÃO ---
 
         // TENTATIVA 2 (FALLBACK): Se não achou PIX na config, tenta na raiz da empresa (Legado)
         // Nota: O Branding (Logo) prioriza a config nova.
