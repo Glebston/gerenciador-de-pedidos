@@ -329,7 +329,7 @@ const addContentToPart = (partItem, partData = {}) => {
                 </div>
                 <div class="col-span-4"><input type="text" placeholder="Nome na Peça" class="p-1 border rounded-md w-full text-sm item-det-name" value="${detail.name || ''}"></div>
                 <div class="col-span-4"><input type="text" placeholder="Tamanho" class="p-1 border rounded-md w-full text-sm item-det-size" value="${sizeValue}" ${isReadonly}></div>
-                <div class="col-span-2"><input type="text" placeholder="Nº" class="p-1 border rounded-md w-full text-sm item-det-number" value="${detail.number || ''}"></div>
+                <div class="col-span-2"><input type="text" placeholder="Nº / Detalhe" class="p-1 border rounded-md w-full text-sm item-det-number" value="${detail.number || ''}"></div>
                 <div class="col-span-1 flex justify-center"><button type="button" class="remove-detailed-row text-red-500 font-bold hover:text-red-700">&times;</button></div>`;
             
             // Listeners para Drag and Drop
