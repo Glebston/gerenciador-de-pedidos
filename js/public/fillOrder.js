@@ -1,7 +1,8 @@
 // js/public/fillOrder.js
-// =========================================================
-// MÓDULO PÚBLICO: PREENCHIMENTO DE PEDIDOS (v3.2 - Fix Tela Final)
-// Responsabilidade: Salvar dados, Branding e Tela de Agradecimento (Overlay).
+// ========================================================
+// MÓDULO PÚBLICO: PREENCHIMENTO DE PEDIDOS (v3.3 - Fix Inputs & Labels)
+// Correção 1: Destrava campo número para aceitar texto (Cargo/Detalhe)
+// Correção 2: Melhora descrição do Modelo (Tipo + Material)
 // ========================================================
 
 import { 
@@ -86,6 +87,13 @@ const DOM = {
 
 // --- 4. INICIALIZAÇÃO ---
 async function init() {
+    // [FIX 1] Força o campo de "Número" a aceitar texto (Cargo/Função)
+    // Isso previne que o navegador bloqueie letras se o HTML estiver como type="number"
+    if (DOM.itemNumber) {
+        DOM.itemNumber.setAttribute('type', 'text');
+        DOM.itemNumber.setAttribute('inputmode', 'text'); // Garante teclado completo no celular
+    }
+
     const params = new URLSearchParams(window.location.search);
     state.companyId = params.get('cid');
     state.orderId = params.get('oid');
@@ -163,11 +171,19 @@ function applyBranding(config) {
 // --- 5. RENDERIZAÇÃO ---
 function renderInterface() {
     DOM.orderInfo.classList.remove('hidden');
+    
+    // Títulos da Página
     document.title = `${state.targetPart.type} - Preenchimento`;
     if(DOM.defaultHeader.querySelector('h1')) DOM.defaultHeader.querySelector('h1').textContent = state.targetPart.type;
     if(DOM.defaultHeader.querySelector('p')) DOM.defaultHeader.querySelector('p').textContent = state.orderData.clientName;
     
-    if(DOM.clientName) DOM.clientName.innerHTML = `<span class="text-gray-500 text-xs uppercase block">Modelo</span> ${state.targetPart.material || 'Padrão'}`;
+    // [FIX 2] Descrição Clara do Modelo (Tipo + Material)
+    if(DOM.clientName) {
+        // Ex: "Gola Polo - Drifity" para ficar bem claro
+        const fullDescription = `${state.targetPart.type} - ${state.targetPart.material || 'Padrão'}`;
+        DOM.clientName.innerHTML = `<span class="text-gray-500 text-xs uppercase block">Peça / Modelo</span> ${fullDescription}`;
+    }
+
     if(DOM.deliveryDate) DOM.deliveryDate.innerHTML = `<span class="text-gray-500 text-xs uppercase block">Cor Predom.</span> ${state.targetPart.colorMain || 'Única'}`;
 }
 
@@ -182,6 +198,14 @@ function updateListUI() {
 
     state.items.forEach((item, index) => {
         const shortSize = item.size.split(' ')[0]; 
+        
+        // [FIX 3] Exibição Inteligente na Lista (Nº ou Texto)
+        let detailDisplay = '';
+        if(item.number) {
+            const isNumeric = /^\d+$/.test(item.number.toString().trim());
+            detailDisplay = isNumeric ? `• Nº ${item.number}` : `• ${item.number}`;
+        }
+
         const card = document.createElement('div');
         card.className = "bg-white p-3 rounded-lg border border-gray-200 shadow-sm flex justify-between items-center fade-in mb-2";
         
@@ -193,7 +217,7 @@ function updateListUI() {
                 <div>
                     <p class="font-bold text-gray-800 leading-none">${item.name}</p>
                     <p class="text-xs text-gray-500 mt-1">
-                        ${item.size} ${item.number ? `• Nº ${item.number}` : ''}
+                        ${item.size} ${detailDisplay}
                     </p>
                 </div>
             </div>
@@ -217,6 +241,13 @@ function renderSuccessSummary(items) {
     if(!items || items.length === 0) return;
 
     items.forEach(item => {
+        // [FIX 4] Exibição Inteligente no Resumo Final
+        let numberDisplay = '';
+        if(item.number) {
+            const isNumeric = /^\d+$/.test(item.number.toString().trim());
+            numberDisplay = isNumeric ? `Nº ${item.number}` : item.number;
+        }
+
         const div = document.createElement('div');
         div.className = "flex justify-between items-center text-sm p-3 bg-white rounded border border-gray-200 shadow-sm";
         div.innerHTML = `
@@ -224,7 +255,7 @@ function renderSuccessSummary(items) {
                 <span class="font-bold text-gray-800">${item.name}</span>
                 <span class="text-gray-400 mx-1">-</span>
                 <span class="font-semibold text-indigo-700">${item.size}</span>
-                ${item.number ? `<span class="text-gray-400 mx-1">-</span> <span class="text-gray-800 font-mono">${item.number}</span>` : ''}
+                ${numberDisplay ? `<span class="text-gray-400 mx-1">-</span> <span class="text-gray-800 font-mono">${numberDisplay}</span>` : ''}
             </div>
         `;
         DOM.summaryListContent.appendChild(div);
@@ -248,12 +279,10 @@ function injectFinishButton() {
     btnContainer.appendChild(finishBtn);
 }
 
-// [CORREÇÃO] Overlay de Tela Cheia (Garante que apareça por cima de tudo)
+// Overlay de Tela Cheia
 function showThankYouScreen() {
-    // Esconde o modal de botões para não ficar duplicado
     DOM.successModal.classList.add('hidden');
 
-    // Cria um container fixo que cobre 100% da tela (z-index alto)
     const overlay = document.createElement('div');
     overlay.className = "fixed inset-0 bg-gray-50 z-[100] flex flex-col items-center justify-center p-4 animate-fade-in";
     
@@ -293,7 +322,6 @@ function showThankYouScreen() {
         </div>
     `;
     
-    // Adiciona direto ao corpo do documento para garantir que fique por cima
     document.body.appendChild(overlay);
 }
 
