@@ -1,8 +1,8 @@
 // js/approval.js
 // ==========================================================
-// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.2 - FIX Details)
-// Correção 1: Leitura híbrida de whatsapp/whatsappNumber
-// Correção 2: Exibição de Número e Função na lista de nomes
+// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.3 - SMART DETAILS)
+// Correção 1: Leitura híbrida de whatsapp/whatsappNumber (Branding)
+// Correção 2: Exibição inteligente de Nº vs Cargo/Detalhe
 // ==========================================================
 
 // 1. Configurações Dinâmicas (Inicia com padrões seguros)
@@ -92,7 +92,7 @@ const loadCompanySettings = async (companyId) => {
             if (data.pixBeneficiary) companyConfig.pixBeneficiary = data.pixBeneficiary;
             if (data.entryPercentage !== undefined) companyConfig.entryPercentage = parseFloat(data.entryPercentage);
             
-            // Aceita 'whatsapp' (novo) OU 'whatsappNumber' (legado)
+            // [Fix Branding] Aceita 'whatsapp' (novo) OU 'whatsappNumber' (legado)
             companyConfig.whatsappNumber = data.whatsapp || data.whatsappNumber || "";
             
             if (data.logoUrl) companyConfig.logoUrl = data.logoUrl;
@@ -222,16 +222,29 @@ const renderOrder = (order) => {
             }
             if(p.specifics && p.specifics.length) detailsHtml += `<div class="mt-1 text-xs text-blue-600"><i class="fa-solid fa-ruler-combined mr-1"></i>${p.specifics.length} item(s) sob medida</div>`;
         } else if (p.details && p.details.length) {
-            // --- CORREÇÃO AQUI (MOSTRAR NÚMERO E FUNÇÃO) ---
             detailsHtml += `<div class="mt-1 text-xs bg-slate-50 p-1 rounded border border-slate-100">
                 <div class="font-semibold text-gray-500 mb-1">Lista de Nomes (${p.details.length}):</div>
                 ${p.details.map(d => {
-                    // Monta texto extra se tiver Número ou Função
+                    // --- LÓGICA INTELIGENTE V2.0.3 ---
                     let extras = [];
-                    if(d.number) extras.push(`Nº ${d.number}`);
+
+                    // 1. Verifica o campo "Nº / Detalhe" (salvo em d.number)
+                    if(d.number) {
+                        // Verifica se é puramente numérico (ex: "10", "99")
+                        const isNumeric = /^\d+$/.test(d.number.toString().trim());
+                        
+                        if(isNumeric) {
+                            extras.push(`Nº ${d.number}`); // Adiciona prefixo se for número
+                        } else {
+                            extras.push(d.number); // Mostra o texto original (ex: "Gerente") se for texto
+                        }
+                    }
+
+                    // 2. Compatibilidade Legada (Caso exista em pedidos antigos)
                     if(d.function) extras.push(d.function);
-                    if(!d.function && d.cargo) extras.push(d.cargo); // Fallback caso salve como 'cargo'
+                    if(!d.function && d.cargo) extras.push(d.cargo);
                     
+                    // 3. Monta o visual
                     const extraHtml = extras.length > 0 ? `<span class="text-gray-500 italic"> - ${extras.join(' - ')}</span>` : '';
 
                     return `<span class="inline-block bg-white border px-1 rounded mr-1 mb-1 shadow-sm">
