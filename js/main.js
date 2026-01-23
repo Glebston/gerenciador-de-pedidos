@@ -5,8 +5,8 @@
 
 async function main() {
     
-    // Cache Buster para garantir que o navegador baixe as novas versões dos módulos
-    const cacheBuster = `?v=${new Date().getTime()}`;
+    // Força uma versão nova manual para limpar o cache de todos
+const cacheBuster = `?v=6.3.0_FORCE_REFRESH`;
 
     try {
         // ========================================================
@@ -560,4 +560,5 @@ async function main() {
     }
 }
 main();
+
 
