@@ -532,11 +532,14 @@ const cacheBuster = `?v=6.3.0_FORCE_REFRESH`;
             userCompanyName: () => userCompanyName 
         });
 
-        const FinanceUIProxy = Object.create(UI);
-        FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
-            const { startDate, endDate } = getCurrentDashboardDates();
-            safeRenderFinance('ListenerProxy', transactions, config, calculateTotalPendingRevenue(startDate, endDate));
-        };
+       // O CÓDIGO CORRIGIDO (Copie e Cole isto no lugar)
+// [FIX] Usamos Object.assign para criar uma cópia editável, pois módulos são Read-Only
+const FinanceUIProxy = Object.assign({}, UI); 
+
+FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
+    const { startDate, endDate } = getCurrentDashboardDates();
+    safeRenderFinance('ListenerProxy', transactions, config, calculateTotalPendingRevenue(startDate, endDate));
+};
 
         initializeFinanceListeners(FinanceUIProxy, { 
             services: {
@@ -560,5 +563,6 @@ const cacheBuster = `?v=6.3.0_FORCE_REFRESH`;
     }
 }
 main();
+
 
 
