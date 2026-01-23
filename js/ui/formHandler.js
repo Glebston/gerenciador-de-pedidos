@@ -138,11 +138,31 @@ export const updateFinancials = () => {
     const discount = parseFloat(DOM.discount.value) || 0;
     const grandTotal = Math.max(0, subtotal - discount);
     
-    // v5.0: Agora pega do array, não do input antigo
+    // v5.0: Calcula o total baseado na nova lista
     const downPayment = currentPaymentsList.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
 
-    // Sincroniza o input antigo para compatibilidade, se necessário
-    if (DOM.downPayment) DOM.downPayment.value = downPayment > 0 ? downPayment : '';
+    // [CORREÇÃO] Sincronização Completa com o Legado
+    // Isso garante que, mesmo que o sistema salve do jeito antigo, salve os dados certos.
+    if (DOM.downPayment) {
+        DOM.downPayment.value = downPayment > 0 ? downPayment : '';
+    }
+
+    // Se houver pagamentos na lista, pegamos o último para atualizar a "Fonte" e "Data" legadas
+    if (currentPaymentsList.length > 0) {
+        const lastPayment = currentPaymentsList[currentPaymentsList.length - 1];
+        
+        // 1. Sincroniza a Data Antiga
+        if (DOM.downPaymentDate) {
+            DOM.downPaymentDate.value = lastPayment.date;
+        }
+
+        // 2. Sincroniza a Fonte Antiga (Caixa/Banco)
+        // O ID geralmente é 'paymentFinSource' ou 'downPaymentSource'. Tentamos achar ambos.
+        const legacySourceSelect = document.getElementById('paymentFinSource') || document.getElementById('downPaymentSource');
+        if (legacySourceSelect) {
+            legacySourceSelect.value = lastPayment.source; // 'caixa' ou 'banco'
+        }
+    }
 
     DOM.grandTotal.textContent = `R$ ${grandTotal.toFixed(2)}`;
     DOM.remainingTotal.textContent = `R$ ${(grandTotal - downPayment).toFixed(2)}`;
