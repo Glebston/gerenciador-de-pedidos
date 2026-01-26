@@ -13,7 +13,17 @@ function collectFormData(UI) {
     const totalDownPayment = paymentList.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
 
     const paymentMethodValue = UI.DOM.paymentMethod ? UI.DOM.paymentMethod.value : '';
+   
+    // Lógica Híbrida: Determina os campos legados baseados no último pagamento da lista
+    let legacySource = 'banco'; 
+    let legacyDate = new Date().toISOString().split('T')[0]; 
 
+    if (paymentList.length > 0) {
+        const lastPayment = paymentList[paymentList.length - 1];
+        legacySource = lastPayment.source || 'banco';
+        legacyDate = lastPayment.date || legacyDate;
+    }
+    
     const data = {
         clientName: UI.DOM.clientName.value, 
         clientPhone: UI.DOM.clientPhone.value, 
@@ -27,8 +37,10 @@ function collectFormData(UI) {
         paymentMethod: paymentMethodValue, 
         mockupUrls: Array.from(UI.DOM.existingFilesContainer.querySelectorAll('a')).map(a => a.href),
         
-        downPaymentDate: new Date().toISOString().split('T')[0], 
-        paymentFinSource: 'banco',
+        // --- BLOCO CORRIGIDO ---
+        payments: paymentList, // <--- AQUI: Salvamos a lista real no banco
+        downPaymentDate: legacyDate, // <--- AQUI: Usa a data do pagamento real
+        paymentFinSource: legacySource, // <--- AQUI: Usa a fonte (Caixa/Banco) real
         paymentFinStatus: 'pago'
     };
     
@@ -57,13 +69,101 @@ export function initializeOrderListeners(UI, deps) {
 
     const { getState, setState, getOptionsFromStorage, services, userCompanyName } = deps;
 
-    // --- GATILHO SECRETO DE MIGRAÇÃO (SHIFT + Clique no Título) ---
+    // --- 1. GATILHO SECRETO DE MIGRAÇÃO ---
     if (UI.DOM.modalTitle) {
         UI.DOM.modalTitle.addEventListener('click', (e) => {
             if (e.shiftKey) {
                 runDatabaseMigration(UI.showInfoModal);
             }
         });
+    } // <--- FECHE O IF DO MODAL AQUI
+
+    // --- 2. NOVA FUNCIONALIDADE: BUSCA GLOBAL COM CONTEXTO ---
+    const searchInput = document.getElementById('globalSearchInput');
+    const searchContainer = document.getElementById('searchResultsContainer');
+    const dashboard = document.getElementById('ordersDashboard');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+    if (searchInput && searchContainer && dashboard) {
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.trim().toLowerCase();
+            const resultsPending = document.getElementById('resultsPendingList');
+            const resultsDelivered = document.getElementById('resultsDeliveredList');
+            const wrapperPending = document.getElementById('resultsPendingWrapper');
+            const wrapperDelivered = document.getElementById('resultsDeliveredWrapper');
+            const noResults = document.getElementById('noResultsMessage');
+
+            // 1. Controle do Botão "X" (Limpar)
+            if (clearSearchBtn) clearSearchBtn.classList.toggle('hidden', term.length === 0);
+
+            // 2. Se a busca for curta, reseta para o Dashboard normal
+            if (term.length < 2) {
+                searchContainer.classList.add('hidden');
+                dashboard.classList.remove('hidden');
+                return;
+            }
+
+            // 3. Ativa Modo de Busca
+            dashboard.classList.add('hidden');
+            searchContainer.classList.remove('hidden');
+            
+            // 4. Filtra os Pedidos (Nome, ID ou Telefone)
+            const allOrders = services.getAllOrders();
+            const matches = allOrders.filter(o => {
+                const searchStr = `${o.clientName} ${o.id} ${o.clientPhone || ''}`.toLowerCase();
+                return searchStr.includes(term);
+            });
+
+            // 5. Limpa e Segrega os Resultados
+            resultsPending.innerHTML = '';
+            resultsDelivered.innerHTML = '';
+
+            const pendingOrders = matches.filter(o => o.orderStatus !== 'Entregue');
+            const deliveredOrders = matches.filter(o => o.orderStatus === 'Entregue');
+
+            // 6. Renderiza Resultados Pendentes (Visual Kanban Card)
+            if (pendingOrders.length > 0) {
+                wrapperPending.classList.remove('hidden');
+                pendingOrders.forEach(order => {
+                    // Requer que generateOrderCardHTML tenha sido exportado no orderRenderer.js
+                    if (UI.generateOrderCardHTML) {
+                        const card = UI.generateOrderCardHTML(order, 'pending');
+                        resultsPending.appendChild(card);
+                    }
+                });
+            } else {
+                wrapperPending.classList.add('hidden');
+            }
+
+            // 7. Renderiza Resultados Entregues (Visual Grid Card)
+            if (deliveredOrders.length > 0) {
+                wrapperDelivered.classList.remove('hidden');
+                deliveredOrders.forEach(order => {
+                    if (UI.generateOrderCardHTML) {
+                        const card = UI.generateOrderCardHTML(order, 'delivered');
+                        resultsDelivered.appendChild(card);
+                    }
+                });
+            } else {
+                wrapperDelivered.classList.add('hidden');
+            }
+
+            // 8. Mensagem "Nenhum resultado"
+            if (pendingOrders.length === 0 && deliveredOrders.length === 0) {
+                noResults.classList.remove('hidden');
+            } else {
+                noResults.classList.add('hidden');
+            }
+        });
+
+        // Funcionalidade do botão Limpar (X)
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input')); 
+                searchInput.focus();
+            });
+        }
     }
 
     // --- AUTOMAÇÃO DE RESPOSTA DE AJUSTE (NOVO) ---
@@ -186,8 +286,10 @@ export function initializeOrderListeners(UI, deps) {
         }
     });
 
-    // --- LISTENERS DA GRID ---
-    UI.DOM.ordersList.addEventListener('click', async (e) => {
+    // --- LISTENERS DA GRID (Refatorado para suportar Busca) ---
+    
+    // 1. Criamos a função lógica que sabe lidar com os cliques nos cards
+    const handleOrderCardClick = async (e) => {
         const btn = e.target.closest('button');
         if (!btn) return;
         // Se clicar no botão de fechar (caso ele estivesse aqui por engano)
@@ -232,6 +334,11 @@ export function initializeOrderListeners(UI, deps) {
                       try {
                           await services.deleteAllTransactionsByOrderId(id);
                           await services.deleteOrder(id);
+                          // Atualiza a busca se estiver ativa
+                          const searchInput = document.getElementById('globalSearchInput');
+                          if (searchInput && searchInput.value) {
+                              searchInput.dispatchEvent(new Event('input'));
+                          }
                       } catch (error) {
                           console.error("Erro ao excluir pedido e finanças:", error);
                           UI.showInfoModal("Falha ao excluir. Verifique o console.");
@@ -280,6 +387,9 @@ export function initializeOrderListeners(UI, deps) {
                         if (generate) {
                             await generateReceiptPdf(updatedOrderData, userCompanyName(), UI.showInfoModal);
                         }
+                        // Atualiza a busca se estiver ativa
+                        const searchInput = document.getElementById('globalSearchInput');
+                        if (searchInput && searchInput.value) searchInput.dispatchEvent(new Event('input'));
                     }
                 } 
                 else {
@@ -309,6 +419,9 @@ export function initializeOrderListeners(UI, deps) {
                         if (generate) {
                             await generateReceiptPdf(updatedOrderData, userCompanyName(), UI.showInfoModal);
                         }
+                        // Atualiza a busca se estiver ativa
+                        const searchInput = document.getElementById('globalSearchInput');
+                        if (searchInput && searchInput.value) searchInput.dispatchEvent(new Event('input'));
                     }
                 }
             } catch (error) {
@@ -316,7 +429,17 @@ export function initializeOrderListeners(UI, deps) {
                 UI.showInfoModal("Ocorreu um erro ao atualizar o pedido.");
             }
         }
-    });
+    };
+
+    // 2. Conectamos essa função à Lista Principal (Dashboard normal)
+    UI.DOM.ordersList.addEventListener('click', handleOrderCardClick);
+
+    // 3. Conectamos essa MESMA função à Lista de Busca (Resultados)
+    // Assim os botões funcionam nos dois lugares!
+    const searchResultsContainer = document.getElementById('searchResultsContainer');
+    if (searchResultsContainer) {
+        searchResultsContainer.addEventListener('click', handleOrderCardClick);
+    }
 
     // --- LISTENER DO MODAL DE DETALHES (View/Visualizar) ---
     UI.DOM.viewModal.addEventListener('click', async (e) => {
