@@ -117,9 +117,8 @@ export function initializeModalAndPricingListeners(UI, deps) {
     });
 
     // --- Listener Global de Teclado para Atalhos ---
-    // v5.7.6: Esta seção está CORRETA. Ela clica nos botões, 
-    // e os botões agora disparam os listeners corretos que 
-    // usam o modalHandler. Nenhuma alteração necessária aqui.
+    // ESTE É O BLOCO QUE ESTAVA CAUSANDO PROBLEMA NA VERSÃO ANTIGA.
+    // NESTA VERSÃO LIMPA, ELE SÓ ESCUTA 'Enter' e 'Escape'.
     document.addEventListener('keydown', (event) => {
         // Atalho para confirmação (Enter)
         if (event.key === 'Enter') {
