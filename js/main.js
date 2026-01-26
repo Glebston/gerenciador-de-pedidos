@@ -68,7 +68,7 @@ const cacheBuster = `?v=6.4.0_KEY_FIX`; // Nova versão
         const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
         const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
-        const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners_v2.js${cacheBuster}`);
+        const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners.js${cacheBuster}`);
         const { initConfigListeners } = await import(`./listeners/configListeners.js${cacheBuster}`);
         
         // [NOVO] Importação da Lógica de Configurações
@@ -563,6 +563,7 @@ FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
     }
 }
 main();
+
 
 
 
