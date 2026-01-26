@@ -1,6 +1,6 @@
 // js/main.js
 // ==========================================================
-// ORQUESTRADOR CENTRAL (v6.2.0 - Branding Update)
+// ORQUESTRADOR CENTRAL (v6.2.1 - Branding Update)
 // ========================================================
 
 async function main() {
@@ -563,6 +563,7 @@ FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
     }
 }
 main();
+
 
 
 
