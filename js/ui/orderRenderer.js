@@ -54,7 +54,7 @@ const getDeliveryCountdown = (deliveryDate, status) => {
     return { text: `Restam ${diffDays} dias`, color: 'green' };
 };
 
-const generateOrderCardHTML = (order, viewType) => {
+export const generateOrderCardHTML = (order, viewType) => {
     let totalValue = 0;
     (order.parts || []).forEach(p => {
         const standardQty = Object.values(p.sizes || {}).flatMap(cat => Object.values(cat)).reduce((s, c) => s + c, 0);
@@ -413,10 +413,35 @@ export const viewOrder = (order) => {
     const grandTotal = subTotal - discount;
     const remaining = grandTotal - (order.downPayment || 0);
     
-    const paymentFinSourceText = order.paymentFinSource === 'caixa' ? 'Caixa' : (order.paymentFinSource === 'banco' ? 'Banco' : 'N/A');
-    const paymentFinStatusText = order.paymentFinStatus === 'a_receber' ? 'A Receber' : 'Recebido';
-    const downPaymentDateText = order.downPaymentDate ? new Date(order.downPaymentDate + 'T00:00:00').toLocaleDateString('pt-br') : 'N/A';
+    // --- LÓGICA HÍBRIDA (LEGADO + NOVO SISTEMA DE LISTA) ---
+    let paymentSourceDisplay = 'N/A';
+    let paymentDateDisplay = 'N/A';
 
+    // 1. Verifica se existe a nova lista de pagamentos
+    if (order.payments && Array.isArray(order.payments) && order.payments.length > 0) {
+        // Gera resumo das fontes: Ex: "Caixa (R$ 100), Banco (R$ 50)"
+        const sources = order.payments.map(p => {
+            const src = p.source === 'caixa' ? 'Caixa' : (p.source === 'banco' ? 'Banco' : p.source);
+            return `${src} (R$ ${parseFloat(p.amount).toFixed(2)})`;
+        });
+        paymentSourceDisplay = sources.join(', ');
+
+        // Pega a data do último pagamento para exibir
+        const lastPayment = order.payments[order.payments.length - 1];
+        if (lastPayment && lastPayment.date) {
+            paymentDateDisplay = new Date(lastPayment.date + 'T00:00:00').toLocaleDateString('pt-br');
+            if (order.payments.length > 1) paymentDateDisplay += ' (Múltiplas)';
+        }
+    } 
+    // 2. Fallback: Usa o sistema antigo se não houver lista
+    else {
+        paymentSourceDisplay = order.paymentFinSource === 'caixa' ? 'Caixa' : (order.paymentFinSource === 'banco' ? 'Banco' : 'N/A');
+        if (order.downPaymentDate) {
+            paymentDateDisplay = new Date(order.downPaymentDate + 'T00:00:00').toLocaleDateString('pt-br');
+        }
+    }
+
+    const paymentFinStatusText = order.paymentFinStatus === 'a_receber' ? 'A Receber' : 'Recebido';
     const modalContent = `
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
             <div id="printable-details" class="p-8 pb-8 overflow-y-auto">
@@ -446,9 +471,9 @@ export const viewOrder = (order) => {
                 <div class="grid grid-cols-2 gap-x-8 mt-2 border-t pt-4 text-sm">
                     <div><strong>Valor Pago (Adiant.):</strong> R$ ${(order.downPayment || 0).toFixed(2)}</div>
                     <div><strong>Forma de Pagamento:</strong> ${order.paymentMethod || 'N/A'}</div>
-                    <div><strong>Data do Pagamento:</strong> ${downPaymentDateText}</div>
+                    <div><strong>Data do Pagamento:</strong> ${paymentDateDisplay}</div>
                     <div><strong>Status do Pagamento:</strong> ${paymentFinStatusText}</div>
-                    <div><strong>Origem do Pagamento:</strong> ${paymentFinSourceText}</div>
+                    <div><strong>Origem do Pagamento:</strong> ${paymentSourceDisplay}</div>
                 </div>
                 
                 <div id="mockupContainerView" class="pt-4 border-t mt-4">
