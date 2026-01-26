@@ -6,7 +6,7 @@
 async function main() {
     
     // Força uma versão nova manual para limpar o cache de todos
-const cacheBuster = `?v=6.3.1_FORCE_REFRESH`;
+const cacheBuster = `?v=6.4.0_KEY_FIX`; // Nova versão
 
     try {
         // ========================================================
@@ -563,6 +563,7 @@ FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
     }
 }
 main();
+
 
 
 
