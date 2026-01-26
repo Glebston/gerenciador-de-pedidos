@@ -158,6 +158,31 @@
         </header>
 
         <main id="mainContent" class="w-full mx-auto p-4 sm:p-6 lg:px-8 max-w-7xl pb-32">
+            
+            <div id="searchContainer" class="mb-6 relative">
+                <div class="relative">
+                    <input type="text" id="globalSearchInput" placeholder="🔍 Buscar por cliente, telefone ou ID..." class="w-full p-3 pl-10 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                         </div>
+                    <button id="clearSearchBtn" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+                    </button>
+                </div>
+                
+                <div id="searchResultsContainer" class="hidden mt-4 space-y-6">
+                    <div id="resultsPendingWrapper" class="hidden">
+                        <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2 pl-1 border-l-4 border-yellow-400">Em Pendentes (A Fazer)</h3>
+                        <div id="resultsPendingList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                    </div>
+                    <div id="resultsDeliveredWrapper" class="hidden">
+                        <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-2 pl-1 border-l-4 border-green-500">Em Entregues (Histórico)</h3>
+                        <div id="resultsDeliveredList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                    </div>
+                    <div id="noResultsMessage" class="hidden text-center py-8 text-gray-500 italic">
+                        Nenhum pedido encontrado para sua busca.
+                    </div>
+                </div>
+            </div>
             <div id="ordersDashboard">
                 <div id="ordersList">
                     <div id="loadingIndicator" class="flex flex-col items-center justify-center py-20 text-gray-400">
@@ -169,6 +194,7 @@
                     </div>
                 </div>
             </div>
+            
             <div id="financeDashboard" class="hidden">
                 <div class="mb-6 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
                     <h2 class="text-2xl font-bold text-gray-800">Visão Financeira</h2>
@@ -272,8 +298,8 @@
                 </div>
             </div>
         </main>
-        
-       <div id="fabBackdrop" class="fixed inset-0 z-[85] hidden cursor-default"></div>
+
+        <div id="fabBackdrop" class="fixed inset-0 z-[85] hidden cursor-default"></div>
 
     <div id="fabMenu" class="fixed bottom-24 right-6 z-[90] flex flex-col items-end gap-3 hidden">
         
@@ -325,7 +351,7 @@
         </script>
 
     </div>
-
+    
     <div id="adminModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm flex items-center justify-center p-4 z-[100] hidden modal-enter">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
             <div class="p-6 bg-gray-800 text-white flex justify-between items-center">
@@ -381,7 +407,7 @@
             </div>
         </div>
     </div>
-
+    
     <div id="adminClientModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm flex items-center justify-center p-4 z-[110] hidden modal-enter">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-200">
             <div class="p-6 bg-gray-50 border-b flex justify-between items-start">
@@ -431,7 +457,7 @@
             </div>
         </div>
     </div>
-
+    
     <div id="blockedModal" class="fixed inset-0 bg-red-900 z-[200] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center border-4 border-red-500">
             <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -858,7 +884,7 @@ Privacidade</a>.
     <script>
     // --- CONFIGURAÇÃO DE AVISOS DE ATUALIZAÇÃO ---
     // Mude este código sempre que quiser notificar os usuários
-    const VERSAO_ATUAL = "1.0.0"; // Ex: Mude para "1.0.1" na próxima vez
+    const VERSAO_ATUAL = "1.0.1"; // Ex: Mude para "1.0.1" na próxima vez
     
     const MENSAGEM_ATUALIZACAO = `
         <strong>⚠️ Atualização Importante (v${VERSAO_ATUAL})</strong><br><br>
@@ -897,4 +923,3 @@ Privacidade</a>.
     
 </body>
 </html>
-
