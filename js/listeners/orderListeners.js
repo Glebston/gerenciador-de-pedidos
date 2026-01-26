@@ -13,17 +13,7 @@ function collectFormData(UI) {
     const totalDownPayment = paymentList.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
 
     const paymentMethodValue = UI.DOM.paymentMethod ? UI.DOM.paymentMethod.value : '';
-   
-    // Lógica Híbrida: Determina os campos legados baseados no último pagamento da lista
-    let legacySource = 'banco'; 
-    let legacyDate = new Date().toISOString().split('T')[0]; 
 
-    if (paymentList.length > 0) {
-        const lastPayment = paymentList[paymentList.length - 1];
-        legacySource = lastPayment.source || 'banco';
-        legacyDate = lastPayment.date || legacyDate;
-    }
-    
     const data = {
         clientName: UI.DOM.clientName.value, 
         clientPhone: UI.DOM.clientPhone.value, 
@@ -37,10 +27,8 @@ function collectFormData(UI) {
         paymentMethod: paymentMethodValue, 
         mockupUrls: Array.from(UI.DOM.existingFilesContainer.querySelectorAll('a')).map(a => a.href),
         
-        // --- BLOCO CORRIGIDO ---
-        payments: paymentList, // <--- AQUI: Salvamos a lista real no banco
-        downPaymentDate: legacyDate, // <--- AQUI: Usa a data do pagamento real
-        paymentFinSource: legacySource, // <--- AQUI: Usa a fonte (Caixa/Banco) real
+        downPaymentDate: new Date().toISOString().split('T')[0], 
+        paymentFinSource: 'banco',
         paymentFinStatus: 'pago'
     };
     
