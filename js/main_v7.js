@@ -66,9 +66,9 @@ async function main() {
         // Listeners (Interações do Usuário)
         const { initializeAuthListeners } = await import(`./listeners/authListeners.js${cacheBuster}`);
         const { initializeNavigationListeners } = await import(`./listeners/navigationListeners.js${cacheBuster}`);
-        const { initializeOrderListeners } = await import(`./listeners/orderListeners.js${cacheBuster}`);
+        const { initializeOrderListeners } = await import(`./listeners/orderListeners_v7.js${cacheBuster}`);
         const { initializeFinanceListeners } = await import(`./listeners/financeListeners.js${cacheBuster}`);
-        const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners.js${cacheBuster}`);
+        const { initializeModalAndPricingListeners } = await import(`./listeners/modalAndPricingListeners_v7.js${cacheBuster}`);
         const { initConfigListeners } = await import(`./listeners/configListeners.js${cacheBuster}`);
         
         // [NOVO] Importação da Lógica de Configurações
@@ -563,6 +563,7 @@ FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
     }
 }
 main();
+
 
 
 
