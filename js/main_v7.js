@@ -1,12 +1,12 @@
-// js/main.js
+// js/main_v7.js
 // ==========================================================
 // ORQUESTRADOR CENTRAL (v6.2.0 - Branding Update)
 // ========================================================
 
 async function main() {
     
-    // Força uma versão nova manual para limpar o cache de todos
-const cacheBuster = `?v=6.4.0_KEY_FIX`; // Nova versão
+    // MUDANÇA CRÍTICA: Data e Hora atual para vencer qualquer Proxy corporativo
+    const cacheBuster = `?v=FINAL_WORK_FIX_${Date.now()}`; 
 
     try {
         // ========================================================
@@ -563,6 +563,7 @@ FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
     }
 }
 main();
+
 
 
 
