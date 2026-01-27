@@ -1,5 +1,5 @@
 // js/listeners/settingsLogic.js
-// =========================================================
+// ========================================================
 // LÓGICA DE CONFIGURAÇÕES & UPLOAD (v1.2 - Production Ready)
 // Responsabilidade: Gerenciar modal, Uploads e Salvar dados
 // ========================================================
