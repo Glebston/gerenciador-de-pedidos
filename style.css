@@ -100,4 +100,3 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 #backupReminderBanner {
     z-index: 50; 
 }
-
