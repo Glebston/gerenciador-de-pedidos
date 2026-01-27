@@ -1,4 +1,4 @@
-/// js/listeners/modalAndPricingListeners.js
+// js/listeners/modalAndPricingListeners.js
 
 // v5.7.22: REMOVIDA importação estática de UI.
 // import * as UI from '../ui.js';
@@ -117,8 +117,9 @@ export function initializeModalAndPricingListeners(UI, deps) {
     });
 
     // --- Listener Global de Teclado para Atalhos ---
-    // ESTE É O BLOCO QUE ESTAVA CAUSANDO PROBLEMA NA VERSÃO ANTIGA.
-    // NESTA VERSÃO LIMPA, ELE SÓ ESCUTA 'Enter' e 'Escape'.
+    // v5.7.6: Esta seção está CORRETA. Ela clica nos botões, 
+    // e os botões agora disparam os listeners corretos que 
+    // usam o modalHandler. Nenhuma alteração necessária aqui.
     document.addEventListener('keydown', (event) => {
         // Atalho para confirmação (Enter)
         if (event.key === 'Enter') {
