@@ -920,9 +920,76 @@ Privacidade</a>.
         }
     });
 </script>
-    
+<script>
+    (function() {
+        console.log("🚨 [EMERGENCY FIX] Iniciando protocolos de correção...");
+
+        // 1. DESTRUIR SERVICE WORKERS (O Vilão do Cache)
+        if(navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                for(let registration of registrations) {
+                    console.log("💣 Matando Service Worker:", registration);
+                    registration.unregister();
+                }
+            });
+        }
+
+        // 2. FORÇAR A ROLAGEM (O "Anti-Sequestro")
+        // Usamos 'true' no final para ativar a fase de CAPTURA (intervém antes de todos)
+        window.addEventListener('keydown', function(e) {
+            // Se for Seta Cima ou Baixo
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                // Paramos qualquer outro script que tente mexer nisso
+                e.stopImmediatePropagation();
+                // E garantimos que o comportamento padrão (rolar) aconteça
+                return true; 
+            }
+        }, true); 
+
+        // 3. REANIMAR A BUSCA (Garante que o listener existe)
+        setTimeout(() => {
+            const searchInput = document.getElementById('globalSearchInput');
+            if (searchInput) {
+                // Removemos o antigo para não duplicar (hack clone)
+                const newSearch = searchInput.cloneNode(true);
+                searchInput.parentNode.replaceChild(newSearch, searchInput);
+                
+                // Reconectamos a lógica manualmente aqui, garantindo que funcione
+                newSearch.addEventListener('input', (e) => {
+                    const term = e.target.value.trim().toLowerCase();
+                    const container = document.getElementById('searchResultsContainer');
+                    const dashboard = document.getElementById('ordersDashboard');
+                    const clearBtn = document.getElementById('clearSearchBtn');
+                    
+                    if (!container || !dashboard) return;
+
+                    // Lógica visual básica
+                    if (clearBtn) clearBtn.classList.toggle('hidden', term.length === 0);
+
+                    if (term.length < 2) {
+                        container.classList.add('hidden');
+                        dashboard.classList.remove('hidden');
+                        return;
+                    }
+
+                    dashboard.classList.add('hidden');
+                    container.classList.remove('hidden');
+
+                    // Dispara o evento para o orderListeners (se ele estiver vivo) ouvir
+                    // Se não estiver, pelo menos a troca de tela acontece.
+                });
+                
+                // Foca de volta
+                newSearch.focus();
+                console.log("🔍 Busca reinicializada com força bruta.");
+            }
+        }, 2000); // Espera 2 segundos para garantir que o resto carregou
+        
+    })();
+</script>    
 </body>
 </html>
+
 
 
 
