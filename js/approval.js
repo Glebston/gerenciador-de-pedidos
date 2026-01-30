@@ -1,9 +1,11 @@
 // js/approval.js
 // ===========================================================
 // ==========================================================
-// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.3 - SMART DETAILS)
+// MÓDULO PÚBLICO DE APROVAÇÃO (v2.0.5 - DETAILED SPECIFICS)
 // Correção 1: Leitura híbrida de whatsapp/whatsappNumber (Branding)
 // Correção 2: Exibição inteligente de Nº vs Cargo/Detalhe
+// Correção 3: Ordenação estrita de tamanhos (PP -> XGG -> Anos)
+// Correção 4: Detalhamento visual de itens sob medida (L x A)
 // ==========================================================
 
 // 1. Configurações Dinâmicas (Inicia com padrões seguros)
@@ -215,37 +217,64 @@ const renderOrder = (order) => {
         
         if (p.partInputType === 'comum') {
             if (p.sizes) {
+                // ORDEM DE EXIBIÇÃO: Lista exata da regra de negócio
+                const sizeOrder = [
+                    "PP", "P", "M", "G", "GG", "XGG",
+                    "2 anos", "4 anos", "6 anos", "8 anos", "10 anos", "12 anos"
+                ];
+
                 const sizesStr = Object.entries(p.sizes).map(([cat, sizesObj]) => {
-                    const s = Object.entries(sizesObj).filter(([,q]) => q > 0).map(([k,v]) => `${k}(${v})`).join(', ');
+                    // Ordena os tamanhos dentro da categoria antes de gerar o HTML
+                    const sortedSizes = Object.entries(sizesObj)
+                        .filter(([,q]) => q > 0)
+                        .sort(([keyA], [keyB]) => {
+                            let idxA = sizeOrder.indexOf(keyA);
+                            let idxB = sizeOrder.indexOf(keyB);
+                            // Se não estiver na lista, joga pro final
+                            if (idxA === -1) idxA = 999;
+                            if (idxB === -1) idxB = 999;
+                            return idxA - idxB;
+                        });
+
+                    const s = sortedSizes.map(([k,v]) => `${k}(${v})`).join(', ');
                     return s ? `<div class="mt-1"><span class="font-semibold text-gray-600 text-[10px] uppercase">${cat}:</span> ${s}</div>` : '';
                 }).join('');
                 detailsHtml += sizesStr;
             }
-            if(p.specifics && p.specifics.length) detailsHtml += `<div class="mt-1 text-xs text-blue-600"><i class="fa-solid fa-ruler-combined mr-1"></i>${p.specifics.length} item(s) sob medida</div>`;
+            // --- NOVA LÓGICA: Detalhamento de Itens Sob Medida (v2.0.5) ---
+            if(p.specifics && p.specifics.length) {
+                detailsHtml += `<div class="mt-1 text-xs bg-blue-50 p-2 rounded border border-blue-100">
+                    <div class="font-semibold text-blue-600 mb-1"><i class="fa-solid fa-ruler-combined mr-1"></i>Sob Medida (${p.specifics.length}):</div>
+                    <div class="flex flex-wrap gap-1">
+                        ${p.specifics.map(s => {
+                             // Fallback seguro para propriedades
+                             const w = s.width || s.largura || '?';
+                             const h = s.height || s.altura || '?';
+                             const obs = s.observation || s.obs ? ` <span class="text-gray-500 italic">(${s.observation || s.obs})</span>` : '';
+                             
+                             return `<span class="bg-white border border-blue-200 px-2 py-1 rounded shadow-sm text-blue-800 font-bold">
+                                L: ${w} x A: ${h}${obs}
+                             </span>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }
+
         } else if (p.details && p.details.length) {
             detailsHtml += `<div class="mt-1 text-xs bg-slate-50 p-1 rounded border border-slate-100">
                 <div class="font-semibold text-gray-500 mb-1">Lista de Nomes (${p.details.length}):</div>
                 ${p.details.map(d => {
-                    // --- LÓGICA INTELIGENTE V2.0.3 ---
                     let extras = [];
-
-                    // 1. Verifica o campo "Nº / Detalhe" (salvo em d.number)
                     if(d.number) {
-                        // Verifica se é puramente numérico (ex: "10", "99")
                         const isNumeric = /^\d+$/.test(d.number.toString().trim());
-                        
                         if(isNumeric) {
-                            extras.push(`Nº ${d.number}`); // Adiciona prefixo se for número
+                            extras.push(`Nº ${d.number}`); 
                         } else {
-                            extras.push(d.number); // Mostra o texto original (ex: "Gerente") se for texto
+                            extras.push(d.number); 
                         }
                     }
-
-                    // 2. Compatibilidade Legada (Caso exista em pedidos antigos)
                     if(d.function) extras.push(d.function);
                     if(!d.function && d.cargo) extras.push(d.cargo);
-                    
-                    // 3. Monta o visual
                     const extraHtml = extras.length > 0 ? `<span class="text-gray-500 italic"> - ${extras.join(' - ')}</span>` : '';
 
                     return `<span class="inline-block bg-white border px-1 rounded mr-1 mb-1 shadow-sm">
