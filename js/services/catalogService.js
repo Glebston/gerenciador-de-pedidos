@@ -1,127 +1,114 @@
 // js/services/catalogService.js
 // ========================================================
-// SERVIÇO DE CATÁLOGO (Versão 11.6.1 - Compatível)
-// Responsabilidade: CRUD do Firestore + Upload ImgBB + Regras de Limite
+// SERVICE DO CATÁLOGO (v2.1 - User Mapping Fix)
+// Compatível com Firebase Modular v11.6.1
 // ========================================================
 
 import { db, auth } from "../firebaseConfig.js";
 import { 
     collection, 
     addDoc, 
-    updateDoc, 
-    deleteDoc, 
+    getDocs, 
     doc, 
+    deleteDoc, 
+    updateDoc, 
     query, 
     where, 
-    orderBy, 
-    getDocs, 
     getCountFromServer,
-    serverTimestamp 
+    getDoc, // <--- Importante para ler o mapping
+    serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Chave da API do ImgBB (Mesma do settingsLogic.js)
+// Chave da API do ImgBB
 const IMGBB_API_KEY = "f012978df48f3596b193c06e05589442";
+
+// --- FUNÇÃO AUXILIAR: Descobre o ID Real da Empresa ---
+async function getRealCompanyId() {
+    const user = auth.currentUser;
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    // 1. Tenta ler o mapeamento na coleção user_mappings
+    try {
+        const mappingRef = doc(db, "user_mappings", user.uid);
+        const mappingSnap = await getDoc(mappingRef);
+
+        if (mappingSnap.exists() && mappingSnap.data().companyId) {
+            // SUCESSO: Retorna o ID da empresa correta (ex: ECP...)
+            return mappingSnap.data().companyId; 
+        }
+    } catch (error) {
+        console.warn("Erro ao buscar mapeamento, tentando fallback:", error);
+    }
+
+    // 2. Fallback: Se não tiver mapeamento, usa o ID do usuário (Comportamento antigo)
+    return user.uid;
+}
 
 // --- 1. UPLOAD DE IMAGEM (ImgBB) ---
 export async function uploadCatalogImage(file) {
     const formData = new FormData();
     formData.append("image", file);
 
-    try {
-        const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-            method: "POST",
-            body: formData
-        });
+    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: "POST",
+        body: formData
+    });
 
-        const result = await response.json();
-
-        if (result.success) {
-            return result.data.url; // Retorna a URL direta
-        } else {
-            throw new Error(result.error?.message || "Falha no upload da imagem");
-        }
-    } catch (error) {
-        console.error("Erro no serviço de imagem:", error);
-        throw error;
+    const result = await response.json();
+    if (result.success) {
+        return result.data.url;
+    } else {
+        throw new Error("Falha no upload: " + (result.error?.message || "Erro desconhecido"));
     }
 }
 
-// --- 2. ADICIONAR PRODUTO (Regra dos 30) ---
+// --- 2. ADICIONAR PRODUTO (Create) ---
 export async function addCatalogItem(itemData) {
-    const user = auth.currentUser;
-    if (!user) throw new Error("Usuário não autenticado");
+    const companyId = await getRealCompanyId(); // <--- CORREÇÃO DE OURO
     
-    // Define o ID da empresa (se não vier no objeto, usa o do usuário logado)
-    const companyId = itemData.companyId || user.uid;
-    const itemsRef = collection(db, "companies", companyId, "catalog_items");
+    // Regra dos 30: Verificar limite
+    const collRef = collection(db, "companies", companyId, "catalog_items");
+    const snapshot = await getCountFromServer(collRef);
+    const count = snapshot.data().count;
 
-    // A. VERIFICAÇÃO DE SEGURANÇA (Contagem)
-    try {
-        const snapshot = await getCountFromServer(itemsRef);
-        const currentCount = snapshot.data().count;
-
-        if (currentCount >= 30) {
-            throw new Error("LIMITE ATINGIDO: Seu armazenamento está cheio (30/30). Exclua um item antigo para adicionar novos.");
-        }
-    } catch (err) {
-        // Se der erro na contagem (ex: coleção não existe), permite prosseguir
-        console.warn("Aviso na verificação de limite:", err);
+    if (count >= 30) {
+        throw new Error("Limite de Armazenamento Atingido (30 itens). Exclua um item antigo.");
     }
 
-    // B. SALVA NO BANCO
-    const docRef = await addDoc(itemsRef, {
+    // Salvar
+    const docRef = await addDoc(collRef, {
         title: itemData.title,
         description: itemData.description || "",
         price: itemData.price || "",
         category: itemData.category || "Geral",
         imageUrl: itemData.imageUrl,
-        isActive: false, // Nasce como Rascunho
+        isActive: false, // Nasce inativo por segurança
         createdAt: serverTimestamp()
     });
-
+    
     return docRef.id;
 }
 
-// --- 3. ALTERAR STATUS / VITRINE (Regra dos 20) ---
-export async function toggleItemStatus(itemId, newStatus, companyId) {
-    if (!companyId) throw new Error("ID da empresa necessário");
-
-    const itemRef = doc(db, "companies", companyId, "catalog_items", itemId);
-
-    // Se for ATIVAR, verifica limite da vitrine
-    if (newStatus === true) {
-        const itemsRef = collection(db, "companies", companyId, "catalog_items");
-        const q = query(itemsRef, where("isActive", "==", true));
-        
-        const snapshot = await getCountFromServer(q);
-        const activeCount = snapshot.data().count;
-
-        if (activeCount >= 20) {
-            throw new Error("VITRINE CHEIA: Você já tem 20 itens ativos. Desative um para destacar este.");
-        }
-    }
-
-    await updateDoc(itemRef, {
-        isActive: newStatus
-    });
-}
-
-// --- 4. LISTAR PRODUTOS ---
-export async function getCatalogItems(companyId) {
-    const itemsRef = collection(db, "companies", companyId, "catalog_items");
-    const q = query(itemsRef, orderBy("createdAt", "desc"));
-
-    const querySnapshot = await getDocs(q);
+// --- 3. LISTAR PRODUTOS (Read) ---
+// Nota: removemos o argumento 'companyId' pois a função descobre sozinha
+export async function getCatalogItems() {
+    const companyId = await getRealCompanyId(); // <--- CORREÇÃO DE OURO
+    const collRef = collection(db, "companies", companyId, "catalog_items");
+    
+    // Busca todos (Ativos e Inativos) para o painel Admin
+    const q = query(collRef); 
+    const snapshot = await getDocs(q);
+    
+    // Preparando retorno compatível com o formato antigo (items + counts)
     const items = [];
-    
     let activeCount = 0;
-    
-    querySnapshot.forEach((doc) => {
+
+    snapshot.docs.forEach(doc => {
         const data = doc.data();
         if (data.isActive) activeCount++;
         items.push({ id: doc.id, ...data });
     });
-
+    
     return {
         items: items,
         totalCount: items.length,
@@ -129,14 +116,35 @@ export async function getCatalogItems(companyId) {
     };
 }
 
-// --- 5. EDITAR PRODUTO ---
-export async function updateCatalogItem(itemId, updateData, companyId) {
-    const itemRef = doc(db, "companies", companyId, "catalog_items", itemId);
-    await updateDoc(itemRef, updateData);
+// --- 4. ALTERAR STATUS (Update) ---
+export async function toggleItemStatus(itemId, newStatus) {
+    const companyId = await getRealCompanyId(); // <--- CORREÇÃO DE OURO
+    
+    // Regra dos 20: Se for ativar, verificar limite da vitrine
+    if (newStatus === true) {
+        const collRef = collection(db, "companies", companyId, "catalog_items");
+        const q = query(collRef, where("isActive", "==", true));
+        const snapshot = await getCountFromServer(q);
+        
+        if (snapshot.data().count >= 20) {
+            throw new Error("Sua vitrine já tem 20 destaques. Desative um para ativar este.");
+        }
+    }
+
+    const docRef = doc(db, "companies", companyId, "catalog_items", itemId);
+    await updateDoc(docRef, { isActive: newStatus });
 }
 
-// --- 6. EXCLUIR PRODUTO ---
-export async function deleteCatalogItem(itemId, companyId) {
-    const itemRef = doc(db, "companies", companyId, "catalog_items", itemId);
-    await deleteDoc(itemRef);
+// --- 5. DELETAR PRODUTO (Delete) ---
+export async function deleteCatalogItem(itemId) {
+    const companyId = await getRealCompanyId(); // <--- CORREÇÃO DE OURO
+    const docRef = doc(db, "companies", companyId, "catalog_items", itemId);
+    await deleteDoc(docRef);
+}
+
+// --- 6. ATUALIZAR PRODUTO (Edit) ---
+export async function updateCatalogItem(itemId, updateData) {
+    const companyId = await getRealCompanyId(); // <--- CORREÇÃO DE OURO
+    const docRef = doc(db, "companies", companyId, "catalog_items", itemId);
+    await updateDoc(docRef, updateData);
 }
