@@ -141,6 +141,13 @@
                                 Configurações da Empresa
                             </a>
                             <div class="border-t border-gray-100"></div>
+                            <a href="#" id="catalogDashboardBtn" class="hidden flex items-center gap-2 block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 font-medium">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                            </svg>
+                            Meu Catálogo Premium
+                        </a>
+                        <div class="border-t border-gray-100"></div>
                             <a href="#" id="financeDashboardBtn" class="flex items-center gap-3 block px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"></a>
                             <div class="border-t border-gray-100"></div>
                             <a href="#" id="backupBtn" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Fazer Backup Manual</a>
@@ -294,6 +301,51 @@
                             </thead>
                             <tbody id="transactionsList" class="divide-y divide-slate-100"></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+            <div id="catalogDashboard" class="hidden">
+                <div class="mb-6 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                    
+                    <div class="flex items-center gap-3">
+                        <button id="exitCatalogBtn" class="bg-white p-2 rounded-full border border-gray-200 text-gray-500 hover:text-purple-600 hover:border-purple-400 shadow-sm transition group" title="Voltar para Pedidos">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 transform group-hover:-translate-x-1 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                        </button>
+                        <div>
+                            <h2 class="text-2xl font-bold text-gray-800">Meu Catálogo Digital</h2>
+                            <p class="text-sm text-gray-500">Gerencie sua vitrine pública</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-3 items-center">
+                        <div class="flex gap-2 text-xs font-semibold bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                            <div class="px-2 border-r border-slate-100">
+                                <span class="text-gray-400 block">Armazenamento</span>
+                                <span id="catalogCountDisplay" class="text-lg text-blue-600">0/30</span>
+                            </div>
+                            <div class="px-2">
+                                <span class="text-gray-400 block">Na Vitrine</span>
+                                <span id="activeCountDisplay" class="text-lg text-green-600">0/20</span>
+                            </div>
+                        </div>
+
+                        <a id="publicStoreLink" href="#" target="_blank" class="hidden text-blue-600 bg-blue-50 hover:bg-blue-100 font-bold py-2 px-3 rounded-lg text-sm transition flex items-center gap-1" title="Ver Minha Loja">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        </a>
+
+                        <button id="addCatalogItemBtn" class="bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 shadow-sm transition flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Novo Produto
+                        </button>
+                    </div>
+                </div>
+
+                <div id="catalogList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div class="col-span-full flex flex-col items-center justify-center py-12 text-gray-400">
+                        <svg class="w-12 h-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <p>Carregando seus produtos...</p>
                     </div>
                 </div>
             </div>
@@ -920,6 +972,69 @@ Privacidade</a>.
         }
     });
 </script>
-    
+  <div id="catalogModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 backdrop-blur-sm flex items-center justify-center p-4 z-[80] hidden modal-enter">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b bg-gray-50 flex justify-between items-center shrink-0">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">📦 Detalhes do Produto</h3>
+                <button id="closeCatalogModalBtn" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            
+            <form id="catalogForm" class="p-6 space-y-5 overflow-y-auto custom-scrollbar">
+                <input type="hidden" id="catalogItemId">
+
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center relative hover:bg-gray-50 transition group cursor-pointer" onclick="document.getElementById('catalogImageInput').click()">
+                    <input type="file" id="catalogImageInput" accept="image/*" class="hidden">
+                    <img id="catalogImagePreview" class="h-48 w-full object-contain mx-auto hidden rounded">
+                    
+                    <div id="catalogImagePlaceholder">
+                        <div class="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        </div>
+                        <p class="text-sm font-medium text-gray-600">Clique para adicionar foto</p>
+                        <p class="text-xs text-gray-400">Recomendado: Formato quadrado ou retrato</p>
+                    </div>
+
+                    <div id="catalogUploadLoader" class="absolute inset-0 bg-white/90 flex flex-col items-center justify-center hidden z-10">
+                        <svg class="animate-spin h-8 w-8 text-blue-600 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span class="text-xs font-bold text-blue-600">Enviando para ImgBB...</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Título do Modelo</label>
+                    <input type="text" id="catalogTitle" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition" placeholder="Ex: Camisa Social Slim" required>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Categoria</label>
+                        <input type="text" id="catalogCategory" list="categoryOptions" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition" placeholder="Ex: Escolar">
+                        <datalist id="categoryOptions">
+                            <option value="Escolar">
+                            <option value="Esportivo">
+                            <option value="Comercial">
+                            <option value="Eventos">
+                            <option value="Universitário">
+                        </datalist>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Preço (Texto Livre)</label>
+                        <input type="text" id="catalogPrice" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none transition" placeholder="Ex: A partir de R$ 45,00">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição Comercial</label>
+                    <textarea id="catalogDescription" rows="3" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none resize-none transition" placeholder="Ex: Tecido Dry-Fit, proteção UV 50+, ideal para prática de esportes..."></textarea>
+                </div>
+
+            </form>
+
+            <div class="p-5 border-t bg-gray-50 flex justify-end gap-3 shrink-0">
+                <button type="button" id="cancelCatalogBtn" class="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition">Cancelar</button>
+                <button type="button" id="saveCatalogBtn" class="px-6 py-2.5 rounded-lg bg-purple-600 text-white font-bold hover:bg-purple-700 shadow-md transform active:scale-95 transition">Salvar Produto</button>
+            </div>
+        </div>
+    </div>  
 </body>
 </html>
