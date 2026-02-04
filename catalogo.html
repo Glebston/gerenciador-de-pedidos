@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <meta property="og:title" content="Acesse meu Catálogo Digital">
+    <meta property="og:description" content="Confira nossos produtos e faça seu pedido pelo WhatsApp.">
+    <meta property="og:image" content="https://i.ibb.co/XfTSLGmD/icone-Catalogo.png">
+    <meta property="og:image:width" content="600">
+    <meta property="og:image:height" content="600">
+    <meta property="og:type" content="website">
+    <title>Catálogo Digital</title>
+    
+    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        /* Limita linhas nos cards */
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        /* Scroll suave no modal */
+        .modal-scroll::-webkit-scrollbar { width: 6px; }
+        .modal-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+        .modal-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 10px; }
+    </style>
+</head>
+<body class="text-gray-800 flex flex-col min-h-screen">
+
+    <div id="loadingScreen" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center">
+        <div class="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4"></div>
+        <p class="text-gray-500 text-sm font-medium animate-pulse">Carregando vitrine...</p>
+    </div>
+
+    <header id="storeHeader" class="bg-white shadow-sm sticky top-0 z-40 border-b border-gray-100 hidden">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div id="companyLogoContainer" class="w-12 h-12 rounded-full bg-gray-50 overflow-hidden border border-gray-200 shadow-sm relative">
+                    <img id="companyLogo" src="" alt="Logo" class="w-full h-full object-contain p-1 hidden bg-white">
+                    <div id="companyLogoPlaceholder" class="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
+                         <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg>
+                    </div>
+                </div>
+                <div>
+                    <h1 id="companyName" class="text-lg font-bold text-gray-900 leading-tight">...</h1>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <p class="text-xs text-green-600 font-bold flex items-center gap-1 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Aberto
+                        </p>
+                        <p id="headerPhoneDisplay" class="text-xs text-gray-500 font-medium hidden"></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button id="shareStoreBtn" class="bg-blue-50 text-blue-600 hover:bg-blue-100 p-2.5 rounded-full transition hidden" title="Compartilhar Loja">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                </button>
+
+                <a id="mainWhatsAppBtn" href="#" target="_blank" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-full shadow-md transition transform hover:scale-105 hidden flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-8.683-2.031-9.676-.272-.099-.47-.149-.734-.149-.124 0-.198.025-.297.049s-.223.124-.347.273c-.124.149-.47.595-.47 1.438 0 .843.595 1.661.693 1.81.099.149 2.156 3.497 5.275 4.876.57.248 1.041.446 1.438.57.693.198 1.487.149 1.932-.05.595-.272 1.758-1.09 2.006-1.783.248-.693.248-1.338.174-1.462z"/></svg>
+                    <span class="font-bold text-sm hidden sm:inline">WhatsApp</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-8 flex-grow w-full">
+        
+        <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 text-center">
+            <div class="bg-gray-100 w-24 h-24 rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+            </div>
+            <h2 class="text-xl font-bold text-gray-800">Catálogo em construção</h2>
+            <p class="text-gray-500 mt-2">Nenhum produto disponível no momento.</p>
+        </div>
+
+        <div id="productGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6"></div>
+
+    </main>
+
+    <div id="productModal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-black bg-opacity-60 transition-opacity backdrop-blur-sm"></div>
+
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg flex flex-col max-h-[90vh]">
+                    
+                    <button id="closeModalBtn" class="absolute top-3 right-3 z-10 bg-white/80 backdrop-blur-md p-2 rounded-full text-gray-500 hover:text-gray-800 hover:bg-white transition shadow-sm">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+
+                    <div class="aspect-square sm:aspect-[4/3] bg-gray-100 relative w-full shrink-0">
+                        <img id="modalImage" src="" alt="" class="w-full h-full object-contain">
+                    </div>
+                    
+                    <div class="px-6 py-5 flex flex-col overflow-y-auto modal-scroll">
+                        <h3 id="modalTitle" class="text-xl font-bold text-gray-900 mb-2 leading-tight"></h3>
+                        <p id="modalPrice" class="text-2xl font-extrabold text-purple-600 mb-4"></p>
+                        
+                        <div class="mb-6">
+                            <h4 class="text-sm font-bold text-gray-900 mb-2 uppercase tracking-wide">Descrição</h4>
+                            <p id="modalDescription" class="text-gray-600 text-sm leading-relaxed whitespace-pre-line"></p>
+                        </div>
+                    </div>
+                     <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 mt-auto shrink-0">
+                         <a id="modalMainBtn" href="#" target="_blank" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 px-4 rounded-xl transition flex items-center justify-center gap-2 text-base shadow-md hover:shadow-lg transform active:scale-95">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-8.683-2.031-9.676-.272-.099-.47-.149-.734-.149-.124 0-.198.025-.297.049s-.223.124-.347.273c-.124.149-.47.595-.47 1.438 0 .843.595 1.661.693 1.81.099.149 2.156 3.497 5.275 4.876.57.248 1.041.446 1.438.57.693.198 1.487.149 1.932-.05.595-.272 1.758-1.09 2.006-1.783.248-.693.248-1.338.174-1.462z"/></svg>
+                            Pedir no WhatsApp
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-white border-t py-8 text-center mt-auto">
+        <p class="text-xs text-gray-400">Tecnologia</p>
+        <p class="text-sm font-bold text-gray-600 flex items-center justify-center gap-1 mt-1">
+            <span class="text-purple-600">⚡ PagLucro Gestor</span>
+        </p>
+    </footer>
+
+    <script type="module">
+        import { db } from './js/firebaseConfig.js';
+        import { doc, getDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const companyId = urlParams.get('uid');
+
+        // Elementos da Interface
+        const loadingScreen = document.getElementById('loadingScreen');
+        const storeHeader = document.getElementById('storeHeader');
+        const productGrid = document.getElementById('productGrid');
+        const emptyState = document.getElementById('emptyState');
+        const logoImg = document.getElementById('companyLogo');
+        const logoPlaceholder = document.getElementById('companyLogoPlaceholder');
+        const headerPhoneDisplay = document.getElementById('headerPhoneDisplay');
+        const shareStoreBtn = document.getElementById('shareStoreBtn');
+        
+        // Elementos do Modal
+        const productModal = document.getElementById('productModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const modalImage = document.getElementById('modalImage');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalPrice = document.getElementById('modalPrice');
+        const modalDescription = document.getElementById('modalDescription');
+        const modalMainBtn = document.getElementById('modalMainBtn');
+
+        let companyPhone = "";
+        let currentCompanyName = "Nossa Loja"; // Para usar no compartilhamento
+
+        // Formata Moeda (R$ 30,00)
+        function formatMoney(value) {
+            if (!value) return "Sob Consulta";
+            let numericValue = parseFloat(value.toString().replace(',', '.'));
+            if (isNaN(numericValue)) return value;
+            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericValue);
+        }
+
+        // Formata Telefone Visual
+        function formatPhoneUI(v) {
+            v = v.replace(/\D/g, "");
+            if (v.length > 10) return `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7,11)}`;
+            if (v.length > 2) return `(${v.slice(0,2)}) ${v.slice(2)}`;
+            return v;
+        }
+
+        async function initCatalog() {
+            if (!companyId) return showError("Link inválido.");
+
+            try {
+                // 1. DADOS PRINCIPAIS
+                const companyRef = doc(db, "companies", companyId);
+                const companySnap = await getDoc(companyRef);
+
+                if (!companySnap.exists()) return showError("Loja não encontrada ou desativada.");
+
+                const data = companySnap.data();
+                
+                // 2. DADOS DE CONFIGURAÇÃO (Fallback)
+                let configData = {};
+                try {
+                    const configRef = doc(db, 'companies', companyId, 'config', 'payment');
+                    const configSnap = await getDoc(configRef);
+                    if(configSnap.exists()) configData = configSnap.data();
+                } catch(e) { console.log("Sem config extra"); }
+
+                // --- UNIFICAÇÃO DOS DADOS ---
+                const finalName = data.companyName || configData.companyName || "Nossa Loja";
+                currentCompanyName = finalName; // Guarda para o share
+                
+                const finalLogo = data.logoUrl || configData.logoUrl || null;
+                const rawPhone = data.whatsapp || data.phone || data.telefone || 
+                                 configData.whatsapp || configData.phone || configData.telefone || "";
+
+                // --- RENDERIZAÇÃO DO CABEÇALHO ---
+                document.title = `${finalName} | Catálogo`;
+                document.getElementById('companyName').textContent = finalName;
+
+                if (finalLogo) showLogo(finalLogo);
+
+                companyPhone = rawPhone.replace(/\D/g, '');
+                
+                if (companyPhone) {
+                    const btn = document.getElementById('mainWhatsAppBtn');
+                    btn.href = `https://wa.me/55${companyPhone}`;
+                    btn.classList.remove('hidden');
+                    headerPhoneDisplay.textContent = formatPhoneUI(companyPhone);
+                    headerPhoneDisplay.classList.remove('hidden');
+                }
+
+                // Configura botão de compartilhar
+                setupShareButton(finalName);
+
+                // 3. BUSCA DOS PRODUTOS
+                const productsRef = collection(db, "companies", companyId, "catalog_items");
+                const q = query(productsRef, where("isActive", "==", true));
+                const querySnapshot = await getDocs(q);
+                
+                if (querySnapshot.empty) {
+                    loadingScreen.classList.add('hidden');
+                    storeHeader.classList.remove('hidden');
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                renderProducts(querySnapshot);
+                setupModalListeners();
+                loadingScreen.classList.add('hidden');
+                storeHeader.classList.remove('hidden');
+
+            } catch (error) {
+                console.error("Erro:", error);
+                showError("Erro ao carregar catálogo.");
+            }
+        }
+
+        function showLogo(url) {
+            if(!url) return;
+            logoImg.src = url;
+            logoImg.classList.remove('hidden');
+            logoPlaceholder.classList.add('hidden');
+        }
+
+        // --- LÓGICA DE COMPARTILHAMENTO (Nativo do Celular) ---
+        function setupShareButton(companyName) {
+            if (navigator.share) {
+                shareStoreBtn.classList.remove('hidden');
+                shareStoreBtn.onclick = () => {
+                    navigator.share({
+                        title: `Catálogo Digital - ${companyName}`,
+                        text: `Olá! Confira os produtos de ${companyName} no nosso catálogo digital:`,
+                        url: window.location.href
+                    }).catch(console.error);
+                };
+            }
+        }
+
+        // --- LÓGICA DO MODAL ---
+        function openProductModal(item) {
+            const priceDisplay = formatMoney(item.price);
+            
+            modalTitle.textContent = item.title;
+            modalPrice.textContent = priceDisplay;
+            modalDescription.textContent = item.description || 'Sem descrição detalhada.';
+            
+            if (item.imageUrl) {
+                modalImage.src = item.imageUrl;
+                modalImage.classList.remove('hidden');
+            } else {
+                 modalImage.src = '';
+            }
+
+            if (companyPhone) {
+                const imgRef = item.imageUrl ? `\n\n(Ref. Foto: ${item.imageUrl})` : "";
+                const msg = encodeURIComponent(`Olá! Gostaria de detalhes sobre o produto: *${item.title}* (Preço: ${priceDisplay}).${imgRef}`);
+                modalMainBtn.href = `https://wa.me/55${companyPhone}?text=${msg}`;
+                modalMainBtn.removeAttribute('onclick');
+            } else {
+                modalMainBtn.href = "#";
+                modalMainBtn.setAttribute('onclick', "alert('O telefone desta loja não está configurado.'); return false;");
+            }
+
+            productModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeProductModal() {
+            productModal.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function setupModalListeners() {
+            closeModalBtn.addEventListener('click', closeProductModal);
+            productModal.addEventListener('click', (e) => {
+                if (e.target === productModal || e.target.firstElementChild === e.target) {
+                    closeProductModal();
+                }
+            });
+        }
+
+        // --- RENDERIZAÇÃO DOS CARDS ---
+        function renderProducts(snapshot) {
+            productGrid.innerHTML = '';
+            
+            snapshot.forEach(docSnap => {
+                const item = docSnap.data();
+                const priceDisplay = formatMoney(item.price);
+                
+                let whatsappLink = "#";
+                let onclickAction = "";
+
+                if (companyPhone) {
+                    const imgRef = item.imageUrl ? `\n\n(Ref. Foto: ${item.imageUrl})` : "";
+                    const msg = encodeURIComponent(`Olá! Tenho interesse no produto: *${item.title}*.${imgRef}`);
+                    whatsappLink = `https://wa.me/55${companyPhone}?text=${msg}`;
+                } else {
+                    onclickAction = "alert('Telefone não configurado.'); return false;";
+                }
+
+                // Card Vertical (Retangular) + Object-Contain (Sem cortes)
+                const cardElement = document.createElement('div');
+                cardElement.className = "bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col group hover:shadow-md transition duration-300";
+                
+                cardElement.innerHTML = `
+                    <div class="image-container aspect-[3/4] bg-gray-50 relative overflow-hidden cursor-pointer">
+                        ${item.imageUrl ? 
+                            `<img src="${item.imageUrl}" alt="${item.title}" class="w-full h-full object-contain group-hover:scale-105 transition duration-500">` : 
+                            `<div class="flex items-center justify-center h-full text-gray-300"><svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>`
+                        }
+                        ${item.category ? `<span class="absolute top-2 left-2 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide">${item.category}</span>` : ''}
+                    </div>
+                    
+                    <div class="p-4 flex-1 flex flex-col">
+                        <h3 class="text-sm font-bold text-gray-900 leading-tight mb-1 line-clamp-2">${item.title}</h3>
+                        <p class="text-xs text-gray-500 mb-3 line-clamp-2">${item.description || 'Sem descrição.'}</p>
+                        
+                        <div class="mt-auto flex items-center justify-between pt-3 border-t border-gray-50">
+                            <span class="text-sm font-bold text-gray-900">${priceDisplay}</span>
+                            
+                            <a href="${whatsappLink}" target="_blank" onclick="${onclickAction}" class="bg-green-100 text-green-700 hover:bg-green-600 hover:text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center gap-1.5 active:scale-95">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-8.683-2.031-9.676-.272-.099-.47-.149-.734-.149-.124 0-.198.025-.297.049s-.223.124-.347.273c-.124.149-.47.595-.47 1.438 0 .843.595 1.661.693 1.81.099.149 2.156 3.497 5.275 4.876.57.248 1.041.446 1.438.57.693.198 1.487.149 1.932-.05.595-.272 1.758-1.09 2.006-1.783.248-.693.248-1.338.174-1.462z"/></svg>
+                                Pedir
+                            </a>
+                        </div>
+                    </div>
+                `;
+
+                cardElement.querySelector('.image-container').addEventListener('click', () => {
+                    openProductModal(item);
+                });
+
+                productGrid.appendChild(cardElement);
+            });
+        }
+
+        function showError(msg) {
+            loadingScreen.innerHTML = `
+                <div class="text-red-500 mb-2">
+                    <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <p class="text-gray-800 font-bold">${msg}</p>
+            `;
+        }
+
+        initCatalog();
+    </script>
+</body>
+</html>
