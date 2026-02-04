@@ -73,7 +73,9 @@ const cacheBuster = `?v=6.3.0_FORCE_REFRESH`;
         
         // [NOVO] Importação da Lógica de Configurações
         const { openSettingsModal } = await import(`./listeners/settingsLogic.js${cacheBuster}`);
-
+        // [NOVO] Importação do Catálogo
+        const { initCatalogListeners } = await import(`./listeners/catalogListeners.js${cacheBuster}`);
+        
         // ========================================================
         // 2. ESTADO GLOBAL
         // ========================================================
@@ -503,7 +505,8 @@ const cacheBuster = `?v=6.3.0_FORCE_REFRESH`;
         // Inicialização dos Listeners
         initializeAuthListeners(UI);
         initConfigListeners(); 
-
+        initCatalogListeners();
+        
         initializeNavigationListeners(UI, {
             handleBackup,
             handleRestore,
@@ -563,3 +566,5 @@ FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
     }
 }
 main();
+
+
