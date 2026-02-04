@@ -1,49 +1,33 @@
 // js/services/catalogService.js
 // ========================================================
-// SERVICE DO CATÁLOGO (v2.1 - User Mapping Fix)
-// Compatível com Firebase Modular v11.6.1
-// ========================================================
+// SERVICE DO CATÁLOGO (v2.2 - Export Helper)
+// =========================================================
 
 import { db, auth } from "../firebaseConfig.js";
 import { 
-    collection, 
-    addDoc, 
-    getDocs, 
-    doc, 
-    deleteDoc, 
-    updateDoc, 
-    query, 
-    where, 
-    getCountFromServer,
-    getDoc, // <--- Importante para ler o mapping
-    serverTimestamp
+    collection, addDoc, getDocs, doc, deleteDoc, updateDoc, 
+    query, where, getCountFromServer, getDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// Chave da API do ImgBB
 const IMGBB_API_KEY = "f012978df48f3596b193c06e05589442";
 
-// --- FUNÇÃO AUXILIAR: Descobre o ID Real da Empresa ---
-async function getRealCompanyId() {
+// --- [ALTERAÇÃO] Adicionado 'export' para usar no Listeners ---
+export async function getRealCompanyId() {
     const user = auth.currentUser;
     if (!user) throw new Error("Usuário não autenticado.");
 
-    // 1. Tenta ler o mapeamento na coleção user_mappings
     try {
         const mappingRef = doc(db, "user_mappings", user.uid);
         const mappingSnap = await getDoc(mappingRef);
 
         if (mappingSnap.exists() && mappingSnap.data().companyId) {
-            // SUCESSO: Retorna o ID da empresa correta (ex: ECP...)
             return mappingSnap.data().companyId; 
         }
     } catch (error) {
-        console.warn("Erro ao buscar mapeamento, tentando fallback:", error);
+        console.warn("Fallback ID:", error);
     }
-
-    // 2. Fallback: Se não tiver mapeamento, usa o ID do usuário (Comportamento antigo)
     return user.uid;
 }
-
 // --- 1. UPLOAD DE IMAGEM (ImgBB) ---
 export async function uploadCatalogImage(file) {
     const formData = new FormData();
