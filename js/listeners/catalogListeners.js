@@ -120,8 +120,27 @@ async function openCatalogDashboard() {
     try {
         // A. Gera o Link Correto (A Mágica acontece aqui)
         if (DOM.storeLinkInput) {
-            const realId = await getRealCompanyId(); // <--- Busca o ID ECP...
-            const baseUrl = window.location.origin + window.location.pathname.replace('index.html', '').replace('dashboard', '') + 'catalogo.html';
+           // 1. Tenta buscar o ID Real (com proteção de erro)
+            let realId = null;
+            try {
+                realId = await getRealCompanyId();
+            } catch (err) {
+                console.warn("Falha ao buscar ID da empresa:", err);
+            }
+
+            // 2. A VACINA: Se o ID vier vazio (null), usa o ID do seu login (Fallback)
+            if (!realId) {
+                console.warn("⚠️ Alerta: ID nulo detectado. Usando ID de usuário como fallback.");
+                const user = auth.currentUser;
+                realId = user ? user.uid : 'erro-uid';
+            }
+
+            // 3. Monta o Link
+            const baseUrl = window.location.origin + window.location.pathname
+                .replace('index.html', '')
+                .replace('dashboard', '') // Garante que não duplica caminhos
+                + 'catalogo.html';
+            
             DOM.storeLinkInput.value = `${baseUrl}?uid=${realId}`;
         }
 
