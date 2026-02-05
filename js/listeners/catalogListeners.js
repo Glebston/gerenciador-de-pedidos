@@ -1,7 +1,7 @@
 // js/listeners/catalogListeners.js
 // ========================================================
-// OUVINTES DO CATÁLOGO (v2.3 - Fixed Public Link)
-// Responsabilidade: Interface, Upsell e Geração de Link Correto
+// OUVINTES DO CATÁLOGO (v2.4 - SAFE CLICK MODE)
+// Correção Definitiva: Gera o link apenas no clique para evitar uid=null
 // ========================================================
 
 import { auth } from "../firebaseConfig.js";
@@ -46,9 +46,9 @@ const DOM = {
 
     // Interface Principal
     list: document.getElementById('catalogList'), 
-    storeLinkInput: document.getElementById('storeLinkInput'), // Input de copiar
-    copyLinkBtn: document.getElementById('copyLinkBtn'), // Botão de copiar
-    publicStoreBtn: document.getElementById('publicStoreLink') // [CORREÇÃO] O Botão do Olhinho
+    storeLinkInput: document.getElementById('storeLinkInput'),
+    copyLinkBtn: document.getElementById('copyLinkBtn'),
+    publicStoreBtn: document.getElementById('publicStoreLink') // O Botão do Olhinho
 };
 
 let tempImageUrl = ""; 
@@ -58,10 +58,8 @@ export function initCatalogListeners() {
     // 1. Botão do Menu
     if (DOM.menuBtn) {
         DOM.menuBtn.classList.remove('hidden');
-        
         DOM.menuBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            // const userPlan = localStorage.getItem('userPlan'); 
             await openCatalogDashboard();
         });
     }
@@ -86,73 +84,101 @@ export function initCatalogListeners() {
         DOM.copyLinkBtn.addEventListener('click', copyStoreLink);
     }
 
-    // 5. Modal e Edição
+    // 5. [NOVO] OUVINTE DO BOTÃO "VER LOJA" (A CORREÇÃO BLINDADA)
+    if (DOM.publicStoreBtn) {
+        // Remove comportamento padrão do link HTML
+        DOM.publicStoreBtn.addEventListener('click', async (e) => {
+            e.preventDefault(); // Impede de abrir o href com uid=null
+            await handleOpenStoreSafe(); // Abre via código
+        });
+    }
+
+    // 6. Modal e Edição
     if (DOM.openModalBtn) DOM.openModalBtn.addEventListener('click', () => openModal());
     if (DOM.cancelBtn) DOM.cancelBtn.addEventListener('click', closeModal);
     if (DOM.closeXBtn) DOM.closeXBtn.addEventListener('click', closeModal);
     if (DOM.imageInput) DOM.imageInput.addEventListener('change', handleImageSelect);
     if (DOM.saveBtn) DOM.saveBtn.addEventListener('click', handleSave);
     
-    // 6. Ações na Lista
+    // 7. Ações na Lista
     if (DOM.list) {
         DOM.list.addEventListener('click', handleListActions);
         DOM.list.addEventListener('change', handleListChanges);
     }
 }
 
-// --- NAVEGAÇÃO E CARREGAMENTO ---
-
-async function openCatalogDashboard() {
-    // Esconde outros painéis
-    if(DOM.ordersView) DOM.ordersView.classList.add('hidden');
-    if(DOM.financeView) DOM.financeView.classList.add('hidden');
-    if(DOM.searchContainer) DOM.searchContainer.classList.add('hidden');
+// --- FUNÇÃO DE ABERTURA SEGURA DA LOJA (NOVA) ---
+async function handleOpenStoreSafe() {
+    const originalText = DOM.publicStoreBtn.innerHTML;
     
-    // Mostra Catálogo
-    DOM.catalogView.classList.remove('hidden');
-    
-    document.getElementById('userDropdown')?.classList.add('hidden');
-
     try {
-        // A. Gera o Link Correto
+        // Mostra feedback visual que está processando
+        DOM.publicStoreBtn.innerHTML = `<svg class="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
         
-        // 1. Tenta buscar o ID Real
-        let realId = null;
-        try {
-            realId = await getRealCompanyId();
-        } catch (err) {
-            console.warn("Falha ao buscar ID da empresa:", err);
+        // 1. Busca ID Fresquinho
+        let realId = await getRealCompanyId();
+        const user = auth.currentUser;
+
+        // 2. Validação Agressiva (Impede null, "null", undefined)
+        if (!realId || realId === 'null' || realId === 'undefined') {
+            console.warn("⚠️ ID inválido detectado na abertura. Usando Fallback.");
+            realId = user ? user.uid : null;
         }
 
-        // 2. A VACINA (Fallback)
         if (!realId) {
-            console.warn("⚠️ Fallback: ID nulo. Usando ID de usuário.");
-            const user = auth.currentUser;
-            realId = user ? user.uid : 'erro-uid';
+            alert("Erro: Não foi possível identificar sua conta. Tente recarregar a página.");
+            return;
         }
 
-        // 3. Monta a URL Base
+        // 3. Monta URL e Abre
         const baseUrl = window.location.origin + window.location.pathname
             .replace('index.html', '')
             .replace('dashboard', '') 
             + 'catalogo.html';
         
         const fullUrl = `${baseUrl}?uid=${realId}`;
-
-        // [CORREÇÃO CRÍTICA] Atualiza a UI do Link
         
-        // Atualiza o Input de Copiar
+        window.open(fullUrl, '_blank');
+
+    } catch (error) {
+        console.error("Erro ao abrir loja:", error);
+        alert("Erro ao abrir loja: " + error.message);
+    } finally {
+        DOM.publicStoreBtn.innerHTML = originalText;
+    }
+}
+
+
+// --- NAVEGAÇÃO E CARREGAMENTO ---
+
+async function openCatalogDashboard() {
+    if(DOM.ordersView) DOM.ordersView.classList.add('hidden');
+    if(DOM.financeView) DOM.financeView.classList.add('hidden');
+    if(DOM.searchContainer) DOM.searchContainer.classList.add('hidden');
+    
+    DOM.catalogView.classList.remove('hidden');
+    document.getElementById('userDropdown')?.classList.add('hidden');
+
+    // Garante que o botão público aparece, mesmo que o link ainda não esteja pronto
+    if (DOM.publicStoreBtn) DOM.publicStoreBtn.classList.remove('hidden');
+
+    try {
+        // Apenas para visualização no Input (Cópia)
+        let realId = await getRealCompanyId();
+        if (!realId) {
+             const user = auth.currentUser;
+             realId = user ? user.uid : '';
+        }
+
+        const baseUrl = window.location.origin + window.location.pathname
+            .replace('index.html', '')
+            .replace('dashboard', '') 
+            + 'catalogo.html';
+        
         if (DOM.storeLinkInput) {
-            DOM.storeLinkInput.value = fullUrl;
+            DOM.storeLinkInput.value = `${baseUrl}?uid=${realId}`;
         }
 
-        // Atualiza o Botão do "Olhinho" (Visualizar Loja)
-        if (DOM.publicStoreBtn) {
-            DOM.publicStoreBtn.href = fullUrl; // <--- O Elo Perdido corrigido aqui
-            DOM.publicStoreBtn.classList.remove('hidden'); // Garante que o botão aparece
-        }
-
-        // B. Carrega Dados
         await loadCatalogData();
 
     } catch (error) {
@@ -171,7 +197,6 @@ async function loadCatalogData() {
     try {
         const data = await getCatalogItems(); 
         renderCatalogUI(data, null); 
-        
     } catch (error) {
         console.error(error);
         if(DOM.list) DOM.list.innerHTML = `<p class="text-center text-gray-500 py-10">Não foi possível carregar os produtos.</p>`;
