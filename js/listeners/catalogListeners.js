@@ -1,7 +1,7 @@
 // js/listeners/catalogListeners.js
 // ========================================================
-// OUVINTES DO CATÁLOGO (v2.4 - SAFE CLICK MODE)
-// Correção Definitiva: Gera o link apenas no clique para evitar uid=null
+// OUVINTES DO CATÁLOGO (v2.5 - LIVE UPDATE)
+// Responsabilidade: Interface, Links e Sincronização de Status em Tempo Real
 // ========================================================
 
 import { auth } from "../firebaseConfig.js";
@@ -48,7 +48,7 @@ const DOM = {
     list: document.getElementById('catalogList'), 
     storeLinkInput: document.getElementById('storeLinkInput'),
     copyLinkBtn: document.getElementById('copyLinkBtn'),
-    publicStoreBtn: document.getElementById('publicStoreLink') // O Botão do Olhinho
+    publicStoreBtn: document.getElementById('publicStoreLink')
 };
 
 let tempImageUrl = ""; 
@@ -84,12 +84,11 @@ export function initCatalogListeners() {
         DOM.copyLinkBtn.addEventListener('click', copyStoreLink);
     }
 
-    // 5. [NOVO] OUVINTE DO BOTÃO "VER LOJA" (A CORREÇÃO BLINDADA)
+    // 5. Botão "Ver Loja" (Clique Seguro)
     if (DOM.publicStoreBtn) {
-        // Remove comportamento padrão do link HTML
         DOM.publicStoreBtn.addEventListener('click', async (e) => {
-            e.preventDefault(); // Impede de abrir o href com uid=null
-            await handleOpenStoreSafe(); // Abre via código
+            e.preventDefault(); 
+            await handleOpenStoreSafe(); 
         });
     }
 
@@ -100,28 +99,24 @@ export function initCatalogListeners() {
     if (DOM.imageInput) DOM.imageInput.addEventListener('change', handleImageSelect);
     if (DOM.saveBtn) DOM.saveBtn.addEventListener('click', handleSave);
     
-    // 7. Ações na Lista
+    // 7. Ações na Lista (Delegate)
     if (DOM.list) {
         DOM.list.addEventListener('click', handleListActions);
         DOM.list.addEventListener('change', handleListChanges);
     }
 }
 
-// --- FUNÇÃO DE ABERTURA SEGURA DA LOJA (NOVA) ---
+// --- ABERTURA SEGURA DA LOJA ---
 async function handleOpenStoreSafe() {
     const originalText = DOM.publicStoreBtn.innerHTML;
     
     try {
-        // Mostra feedback visual que está processando
         DOM.publicStoreBtn.innerHTML = `<svg class="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
         
-        // 1. Busca ID Fresquinho
         let realId = await getRealCompanyId();
         const user = auth.currentUser;
 
-        // 2. Validação Agressiva (Impede null, "null", undefined)
         if (!realId || realId === 'null' || realId === 'undefined') {
-            console.warn("⚠️ ID inválido detectado na abertura. Usando Fallback.");
             realId = user ? user.uid : null;
         }
 
@@ -130,14 +125,12 @@ async function handleOpenStoreSafe() {
             return;
         }
 
-        // 3. Monta URL e Abre
         const baseUrl = window.location.origin + window.location.pathname
             .replace('index.html', '')
             .replace('dashboard', '') 
             + 'catalogo.html';
         
         const fullUrl = `${baseUrl}?uid=${realId}`;
-        
         window.open(fullUrl, '_blank');
 
     } catch (error) {
@@ -147,7 +140,6 @@ async function handleOpenStoreSafe() {
         DOM.publicStoreBtn.innerHTML = originalText;
     }
 }
-
 
 // --- NAVEGAÇÃO E CARREGAMENTO ---
 
@@ -159,11 +151,9 @@ async function openCatalogDashboard() {
     DOM.catalogView.classList.remove('hidden');
     document.getElementById('userDropdown')?.classList.add('hidden');
 
-    // Garante que o botão público aparece, mesmo que o link ainda não esteja pronto
     if (DOM.publicStoreBtn) DOM.publicStoreBtn.classList.remove('hidden');
 
     try {
-        // Apenas para visualização no Input (Cópia)
         let realId = await getRealCompanyId();
         if (!realId) {
              const user = auth.currentUser;
@@ -348,6 +338,7 @@ async function handleListActions(e) {
     }
 }
 
+// [CORREÇÃO] Função Atualizada para Redesenhar a Tela ao Mudar Status
 async function handleListChanges(e) {
     const toggle = e.target;
     if (toggle.type === 'checkbox' && toggle.dataset.action === 'toggleStatus') {
@@ -355,10 +346,16 @@ async function handleListChanges(e) {
         const newStatus = toggle.checked;
 
         try {
+            // 1. Atualiza no Banco de Dados
             await toggleItemStatus(id, newStatus);
+            
+            // 2. Recarrega os dados para atualizar os Contadores e o Rótulo (Rascunho/Vitrine)
+            await loadCatalogData();
+
         } catch (error) {
-            alert(error.message);
-            toggle.checked = !newStatus; 
+            console.error(error);
+            alert("Erro: " + error.message);
+            toggle.checked = !newStatus; // Reverte visualmente em caso de erro
         }
     }
 }
