@@ -100,3 +100,62 @@ input[type="file"]::file-selector-button { @apply bg-gray-200 text-gray-800 font
 #backupReminderBanner {
     z-index: 50; 
 }
+
+/* ==========================================================================
+   AJUSTES CIRÚRGICOS MOBILE (Dossiê UX Mobile-First)
+   Estas regras só se aplicam quando a tela for menor que 640px.
+   O PC continua ignorando isso completamente.
+   ========================================================================== */
+
+@media (max-width: 640px) {
+    
+    /* 1. ZOOM OUT ÓTICO
+       Reduz a fonte base de 16px para 14px.
+       Isso faz com que todos os elementos baseados em 'rem' (Tailwind)
+       fiquem ligeiramente menores, simulando um "Modo PC" natural. */
+    html {
+        font-size: 14px; 
+    }
+
+    /* 2. ERGONOMIA DE TOQUE (FAT FINGER)
+       Aumenta a altura mínima de áreas clicáveis para 48px (Padrão Android/iOS).
+       Evita que o usuário precise dar zoom para clicar num input. */
+    button, input, select, .part-type-selector, .source-selector {
+        min-height: 48px; 
+    }
+
+    /* 3. KANBAN FLUIDO (Correção do Vilão 350px)
+       No PC é 350px fixo. No celular, muda para 85% da largura da tela.
+       O "85vw" faz com que o card do lado apareça um pouquinho (15%),
+       ensinando visualmente ao usuário que ele pode arrastar para o lado. */
+    .kanban-column {
+        flex: 0 0 85vw !important; 
+        max-width: 85vw !important;
+    }
+    
+    /* 4. TABELAS RESPIRÁVEIS
+       Reduz o preenchimento lateral das células para caber mais texto
+       sem quebrar linha prematuramente. */
+    td, th {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        font-size: 0.75rem !important; /* Texto um pouco menor nas tabelas */
+    }
+
+    /* 5. MODAIS FULL-SCREEN
+       Remove as margens e bordas arredondadas dos modais no celular,
+       fazendo eles parecerem uma nova tela do App. Aproveitamento de 100%. */
+    [id$="Modal"] > div {
+        max-width: 100% !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+    }
+    
+    /* Ajuste específico para o conteúdo scrollável do modal não ficar preso */
+    [id$="Modal"] form, [id$="Modal"] .overflow-y-auto {
+        max-height: calc(100vh - 60px) !important; /* Desconta o cabeçalho */
+    }
+}
