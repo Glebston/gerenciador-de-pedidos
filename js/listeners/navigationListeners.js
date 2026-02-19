@@ -4,7 +4,7 @@
 // Status: SOLUÇÃO DEFINITIVA (Simples e Robusta)
 // ==========================================================
 
-import { resetIdleTimer } from '../utils.js'; 
+import { resetIdleTimer } from '../security/sessionManager.js';
 
 export function initializeNavigationListeners(UI, deps) {
 
