@@ -3,7 +3,23 @@
 // MÓDULO ORDER LISTENERS (v5.34.0 - UX Receipt Fix)
 // ==========================================================
 
-import { fileToBase64, uploadToImgBB, generateReceiptPdf, generateComprehensivePdf, generateProductionOrderPdf, runDatabaseMigration } from '../utils.js';
+// [REFATORADO] Importações divididas por responsabilidade
+
+// 1. Motor de PDF
+import { 
+    generateReceiptPdf, 
+    generateComprehensivePdf, 
+    generateProductionOrderPdf 
+} from '../services/pdfService.js';
+
+// 2. Serviço de Imagens (Upload e Conversão)
+import { 
+    fileToBase64, 
+    uploadToImgBB 
+} from '../services/imageService.js';
+
+// 3. Ferramentas Administrativas
+import { runDatabaseMigration } from '../admin/migrationTools.js';
 
 /**
  * Coleta os dados do formulário do pedido.
