@@ -1,6 +1,6 @@
 // js/main.js
 // ==========================================================
-// ORQUESTRADOR CENTRAL (v6.2.0 - Branding Update)
+// ORQUESTRADOR CENTRAL (v6.3.1 - Branding Update)
 // ========================================================
 
 async function main() {
@@ -60,7 +60,7 @@ const cacheBuster = `?v=6.3.0_FORCE_REFRESH`;
             cleanupPricingService 
         } = await import(`./services/pricingService.js${cacheBuster}`);
         
-        const { initializeIdleTimer } = await import(`./utils.js${cacheBuster}`);
+        const { initializeIdleTimer } = await import(`./security/sessionManager.js${cacheBuster}`);
         const UI = await import(`./ui.js${cacheBuster}`);
 
         // Listeners (Interações do Usuário)
@@ -566,5 +566,4 @@ FinanceUIProxy.renderFinanceDashboard = (transactions, config) => {
     }
 }
 main();
-
 
