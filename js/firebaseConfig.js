@@ -13,12 +13,16 @@ const firebaseConfig = {
   appId: "1:230026949437:web:9f19f286aefb96e0330b54"
 };
 
-// Inicializa o Firebase
+// Inicializa o Firebase Principal (Para você, Administrador)
 const app = initializeApp(firebaseConfig);
-
-// Inicializa os serviços do Firestore e Auth e os exporta para serem usados em outros módulos
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-export { db, auth };
+// [NOVO] App Secundário: Usado exclusivamente para criar a conta da equipe
+// de produção em segundo plano, sem derrubar a sua sessão atual.
+const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+const secondaryAuth = getAuth(secondaryApp);
+
+export { db, auth, secondaryAuth };
+
 
